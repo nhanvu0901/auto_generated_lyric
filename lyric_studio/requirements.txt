@@ -1,0 +1,4 @@
+# Pin to last stable Flet v0 release.
+# 0.28.3 broke FilePicker on macOS; 0.80+ is a full API rewrite with known desktop bugs.
+# 0.28.2 is the sweet spot: stable old API, FilePicker works, ElevatedButton etc. all work.
+flet[all]==0.28.2

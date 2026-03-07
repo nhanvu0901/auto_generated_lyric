@@ -3,7 +3,29 @@
     "allow": [
       "Bash(python:*)",
       "WebSearch",
-      "WebFetch(domain:api-docs.deepseek.com)"
+      "WebFetch(domain:api-docs.deepseek.com)",
+      "WebFetch(domain:www.gethopp.app)",
+      "WebFetch(domain:www.squadbase.dev)",
+      "WebFetch(domain:collabnix.com)",
+      "Bash(pip show flet | head -3)",
+      "Bash(gtimeout 10 python main.py 2>&1 || true)",
+      "Bash(claude -p --max-turns 1 --tools \"\" \"Say exactly: ok\" 2>&1; echo \"EXIT: $?\")",
+      "Read(//Users/nhanvu/.claude/**)",
+      "Read(//Users/nhanvu/**)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\([k for k in d.keys\\(\\)]\\)\")",
+      "Bash(cat ~/.claude.json | python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); acc=d.get\\('oauthAccount'\\); print\\(bool\\(acc\\), type\\(acc\\)\\)\")",
+      "Bash(cd /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio && python3 -c \"from config import GENRES, MODELS, load_config; from engine import is_claude_installed, is_claude_logged_in; print\\('OK', is_claude_installed\\(\\), is_claude_logged_in\\(\\)\\)\")",
+      "Bash(sed -i '' 's/ft\\\\.padding\\\\.symmetric/ft.Padding.symmetric/g' main.py && sed -i '' 's/ft\\\\.border\\\\.all/ft.Border.all/g' main.py && sed -i '' 's/ft\\\\.border\\\\.only/ft.Border.only/g' main.py && echo \"Done\")",
+      "Bash(.venv/bin/python -c \"import flet as ft, inspect; print\\(inspect.signature\\(ft.FilePicker.__init__\\)\\)\")",
+      "Bash(.venv/bin/python -c \"import flet as ft, inspect; fp=ft.FilePicker\\(\\); print\\([m for m in dir\\(fp\\) if not m.startswith\\('_'\\)]\\)\" 2>&1 | tr ',' '\\\\n' | grep -i \"result\\\\|change\\\\|select\\\\|direct\")",
+      "Bash(.venv/bin/python -c \"import flet as ft, inspect; fp=ft.FilePicker\\(\\); print\\([m for m in dir\\(fp\\) if 'on_' in m]\\)\")",
+      "Bash(.venv/bin/python -c \"import flet as ft, inspect; print\\(inspect.signature\\(ft.FilePicker.get_directory_path\\)\\)\")",
+      "Bash(/Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv/bin/python -m pip install \"flet==0.28.2\" -q && echo \"DONE\")",
+      "Bash(which uv && uv pip install \"flet==0.28.2\" --python /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv/bin/python -q && echo \"DONE\")",
+      "Bash(/Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv/bin/python -c \"import flet; print\\(flet.version.version\\)\")",
+      "Bash(uv pip install \"flet[all]==0.28.2\" --python /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv/bin/python -q && echo \"DONE\")",
+      "Bash(sed -i '' 's/ft\\\\.icons\\\\./ft.Icons./g' main.py && sed -i '' 's/ft\\\\.colors\\\\./ft.Colors./g' main.py && echo \"DONE\")",
+      "Bash(.venv/bin/python -c \"from engine import generate_lyrics, save_songs, _title_to_filename; print\\(_title_to_filename\\('The Last Tuesday'\\)\\); print\\(_title_to_filename\\('Love/Hate: A Story?'\\)\\); print\\('OK'\\)\")"
     ]
   }
 }

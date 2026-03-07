@@ -9,7 +9,7 @@ import requests
 # ── CONFIG ──────────────────────────────────────
 DEEPSEEK_API_KEY = ""
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
-PROMPT_PATH      = Path(__file__).parent.parent / "data" / "lyric_generation_prompt.md"
+PROMPT_PATH      = Path(__file__).parent.parent / "prompt" / "lyric_generation_prompt.md"
 OUTPUT_DIR       = Path(__file__).parent / "output"
 NUM_LYRICS       = 10    # total number of lyrics to generate
 BATCH_SIZE       = 2     # how many lyrics per single API call
