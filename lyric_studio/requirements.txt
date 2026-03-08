@@ -6,3 +6,6 @@ flet[all]==0.28.2
 # Claude Agent SDK for real-time streaming
 claude-agent-sdk>=0.1.0
 anyio>=3.0.0
+
+# PyInstaller for packaging desktop apps
+pyinstaller>=6.0.0

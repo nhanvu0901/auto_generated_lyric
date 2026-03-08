@@ -17,6 +17,31 @@ LYRIC_PROMPT_PATH = (
 )
 
 
+def calculate_batches(total_songs: int, batch_size: int = 2) -> list[int]:
+    """
+    Calculate batch sizes for song generation.
+    
+    Examples:
+        calculate_batches(5, 2) -> [2, 2, 1]
+        calculate_batches(10, 2) -> [2, 2, 2, 2, 2]
+        calculate_batches(1, 2) -> [1]
+    
+    Args:
+        total_songs: Total number of songs to generate
+        batch_size: Maximum songs per batch (default: 2)
+    
+    Returns:
+        List of batch sizes
+    """
+    batches = []
+    remaining = total_songs
+    while remaining > 0:
+        current_batch = min(batch_size, remaining)
+        batches.append(current_batch)
+        remaining -= current_batch
+    return batches
+
+
 def is_claude_installed() -> bool:
     """Check if Claude Code CLI is available (bundled with SDK or system-wide)."""
     try:
@@ -172,10 +197,24 @@ def generate_lyrics(
         if on_progress:
             on_progress(len(all_songs), num_songs, status)
 
-    async def generate_song(index: int):
-        prog(f"[{index+1}/{num_songs}] Building prompt…")
+    async def generate_batch(batch_idx: int, batch_size: int, total_batches: int):
+        """
+        Generate a batch of songs (1 or more).
         
-        user_prompt = build_user_prompt(genre, theme, 1)
+        Args:
+            batch_idx: Current batch index (0-based)
+            batch_size: Number of songs in this batch
+            total_batches: Total number of batches
+        
+        Returns:
+            list[dict]: List of song dicts (empty if parse failed)
+            None: If rate limit was hit (signals to stop all processing)
+        """
+        songs_so_far = len(all_songs)
+        
+        prog(f"[Batch {batch_idx+1}/{total_batches}] Generating {batch_size} song(s)…")
+        
+        user_prompt = build_user_prompt(genre, theme, batch_size)
         
         options = ClaudeAgentOptions(
             model=model,
@@ -185,7 +224,7 @@ def generate_lyrics(
             include_partial_messages=True,
         )
 
-        prog(f"[{index+1}/{num_songs}] Connecting to Claude ({model})…")
+        prog(f"[Batch {batch_idx+1}/{total_batches}] Connecting to Claude ({model})…")
 
         raw_text = ""
         current_line = ""
@@ -215,7 +254,7 @@ def generate_lyrics(
                     elif event_type == "message_stop":
                         if current_line.strip():
                             prog(f"  {current_line[:100]}")
-                        prog(f"  Generation complete")
+                        prog(f"  Batch generation complete")
 
                 elif isinstance(message, AssistantMessage):
                     if not raw_text:
@@ -235,38 +274,62 @@ def generate_lyrics(
                 return None
 
             if not raw_text:
-                prog(f"[{index+1}/{num_songs}] No output received — skipping.")
-                return None
+                prog(f"[Batch {batch_idx+1}/{total_batches}] No output received — skipping batch.")
+                return []
 
-            prog(f"[{index+1}/{num_songs}] Parsing lyrics…")
-            songs = parse_songs(raw_text, genre, theme)
-            if not songs:
+            prog(f"[Batch {batch_idx+1}/{total_batches}] Parsing lyrics…")
+            
+            if batch_size == 1:
+                # Single song - use simple parser
                 song = parse_single_song(raw_text, genre, theme)
                 if song:
-                    songs = [song]
-
-            if songs:
-                prog(f"[{index+1}/{num_songs}] ✓ \"{songs[0]['title']}\"")
-                return songs[0]
+                    prog(f"[Batch {batch_idx+1}/{total_batches}] ✓ \"{song['title']}\"")
+                    return [song]
+                else:
+                    prog(f"[Batch {batch_idx+1}/{total_batches}] Could not parse output — skipping.")
+                    return []
             else:
-                prog(f"[{index+1}/{num_songs}] Could not parse output — skipping.")
-                return None
+                # Multiple songs - use delimiter parser
+                songs = parse_songs(raw_text, genre, theme)
+                if songs:
+                    for song in songs:
+                        prog(f"  ✓ \"{song['title']}\"")
+                    prog(f"[Batch {batch_idx+1}/{total_batches}] Parsed {len(songs)}/{batch_size} song(s)")
+                    return songs
+                else:
+                    prog(f"[Batch {batch_idx+1}/{total_batches}] Could not parse output — skipping.")
+                    return []
 
         except Exception as e:
-            prog(f"[{index+1}/{num_songs}] Exception: {e}")
-            return None
+            prog(f"[Batch {batch_idx+1}/{total_batches}] Exception: {e}")
+            return []
 
     async def generate_all():
-        for i in range(num_songs):
-            song = await generate_song(i)
-            if song:
-                all_songs.append(song)
-            if "LIMIT HIT" in (on_progress.__self__ if hasattr(on_progress, '__self__') else ''):
+        BATCH_SIZE = 2
+        batches = calculate_batches(num_songs, BATCH_SIZE)
+        
+        prog(f"Planning {len(batches)} batch(es) for {num_songs} song(s) (batch size: {BATCH_SIZE})")
+        
+        for batch_idx, batch_size in enumerate(batches):
+            batch_songs = await generate_batch(batch_idx, batch_size, len(batches))
+            
+            # None means rate limit hit - stop everything
+            if batch_songs is None:
+                prog("Stopping due to rate limit.")
                 break
+            
+            # Empty list means parse error - continue to next batch
+            if batch_songs:
+                all_songs.extend(batch_songs)
+                prog(f"Progress: {len(all_songs)}/{num_songs} song(s) completed")
 
     anyio.run(generate_all)
     
-    prog(f"Finished. {len(all_songs)}/{num_songs} song(s) generated.")
+    if len(all_songs) < num_songs:
+        prog(f"Finished with partial results: {len(all_songs)}/{num_songs} song(s) generated.")
+    else:
+        prog(f"Finished successfully: {len(all_songs)}/{num_songs} song(s) generated.")
+    
     return all_songs
 
 

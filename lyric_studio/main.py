@@ -156,6 +156,8 @@ def main(page: ft.Page):
         setup_log.controls.append(ft.Text(f"› {msg}", size=12, color=color, selectable=True))
         setup_log.visible = True
         setup_log_card.visible = True
+        # Auto-scroll to bottom
+        setup_log.scroll_to(offset=-1, duration=100)
         page.update()
 
     def do_login(e):
@@ -284,6 +286,8 @@ def main(page: ft.Page):
     def log_gen(msg: str, color: str = DIM):
         gen_log.controls.append(ft.Text(f"› {msg}", size=12, color=color, selectable=True))
         gen_log_card.visible = True
+        # Auto-scroll to bottom
+        gen_log.scroll_to(offset=-1, duration=100)
         page.update()
 
     generate_btn = ft.ElevatedButton(
@@ -294,7 +298,27 @@ def main(page: ft.Page):
         on_click=lambda e: do_generate(e),
     )
 
-    pills_row       = ft.Row(visible=False, spacing=8, wrap=True)
+    reset_btn = ft.OutlinedButton(
+        "Reset",
+        icon=ft.Icons.REFRESH,
+        icon_color=DIM,
+        visible=False,
+        height=46,
+        on_click=lambda e: do_reset(e),
+    )
+
+    pills_row       = ft.Row(
+        visible=False, 
+        spacing=8, 
+        scroll=ft.ScrollMode.AUTO,
+        auto_scroll=False,
+    )
+    # Container for tabs with scroll indicator
+    pills_container = ft.Container(
+        content=pills_row,
+        visible=False,
+        padding=ft.padding.symmetric(vertical=8, horizontal=4),
+    )
     preview_col     = ft.Column(visible=False, expand=True, scroll=ft.ScrollMode.AUTO, spacing=0)
     open_folder_btn = ft.TextButton(
         "Open Output Folder",
@@ -383,8 +407,9 @@ def main(page: ft.Page):
         count_tf.error_text = None
 
         generate_btn.disabled   = True
+        reset_btn.visible       = False
         progress_bar.visible    = True
-        pills_row.visible       = False
+        pills_container.visible = False
         preview_col.visible     = False
         open_folder_btn.visible = False
         gen_log.controls        = []
@@ -400,6 +425,10 @@ def main(page: ft.Page):
 
             log_gen(f"Model: {model_label}  |  Genre: {genre_label}  |  Songs: {count}")
             log_gen(f"Theme: \"{theme}\"")
+
+            def truncate_title(title: str, max_len: int = 25) -> str:
+                """Truncate song title if too long."""
+                return title if len(title) <= max_len else title[:max_len-1] + "…"
 
             def on_progress(cur, total, status):
                 progress_text.value = status
@@ -430,16 +459,19 @@ def main(page: ft.Page):
 
                 pills_row.controls = [
                     ft.ElevatedButton(
-                        f"Song {i+1}",
+                        truncate_title(song["title"]),
                         bgcolor=ACCENT if i == 0 else SURFACE2,
                         color=TEXT,
+                        tooltip=song["title"],  # Show full title on hover
                         on_click=lambda e, idx=i: show_song(idx),
                     )
-                    for i in range(len(songs))
+                    for i, song in enumerate(songs)
                 ]
                 pills_row.visible       = True
+                pills_container.visible = True
                 preview_col.visible     = True
                 open_folder_btn.visible = True
+                reset_btn.visible       = True
                 show_song(0)
                 progress_text.value = f"{len(songs)} song{'s' if len(songs) > 1 else ''} generated"
             else:
@@ -451,6 +483,24 @@ def main(page: ft.Page):
             page.update()
 
         threading.Thread(target=_run, daemon=True).start()
+
+    def do_reset(e):
+        nonlocal generated_songs
+        generated_songs = []
+        pills_row.controls = []
+        pills_row.visible = False
+        pills_container.visible = False
+        preview_col.controls = []
+        preview_col.visible = False
+        preview_col.data = None
+        open_folder_btn.visible = False
+        reset_btn.visible = False
+        gen_log.controls = []
+        gen_log_card.visible = False
+        progress_text.value = ""
+        progress_bar.visible = False
+        theme_input.value = ""
+        page.update()
 
     def do_open_folder(e):
         folder = config.get("output_folder", "")
@@ -476,7 +526,7 @@ def main(page: ft.Page):
                 ft.Row([theme_input]),
                 ft.Container(height=10),
                 ft.Row(
-                    [genre_dd, model_dd, count_tf, ft.Container(expand=True), generate_btn],
+                    [genre_dd, model_dd, count_tf, ft.Container(expand=True), reset_btn, generate_btn],
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=12,
                 ),
@@ -525,7 +575,7 @@ def main(page: ft.Page):
                             ],
                             spacing=6,
                         ),
-                        pills_row,
+                        pills_container,
                         ft.Container(content=preview_col, expand=True),
                         ft.Row([open_folder_btn], alignment=ft.MainAxisAlignment.END),
                         ft.Container(height=16),
