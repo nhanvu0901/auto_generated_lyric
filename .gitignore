@@ -6,6 +6,7 @@ __pycache__/
 .Python
 *.egg-info/
 dist/
+!lyric_studio/deploy/dist/
 build/
 .env
 venv/
@@ -15,6 +16,9 @@ venv/
 .idea/
 .vscode/
 *.iml
+
+# Claude
+lyric_studio/.claude/
 
 # OS
 .DS_Store
