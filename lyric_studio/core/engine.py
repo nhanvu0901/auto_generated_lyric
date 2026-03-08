@@ -6,30 +6,40 @@ import os
 import re
 import platform
 import shutil
+import sys
 from pathlib import Path
 
 SONG_START = "===SONG_START==="
 SONG_END = "===SONG_END==="
 
-SYSTEM_PROMPT_PATH = Path(__file__).parent / "system_prompt.txt"
-LYRIC_PROMPT_PATH = (
-    Path(__file__).parent.parent / "prompt" / "lyric_generation_prompt.md"
-)
+# When frozen by PyInstaller, __file__ resolves inside sys._MEIPASS.
+# Data files are extracted to sys._MEIPASS (flat) and sys._MEIPASS/prompt/.
+# In normal Python execution the files sit relative to this source file.
+if hasattr(sys, "_MEIPASS"):
+    _BASE = Path(sys._MEIPASS)
+    SYSTEM_PROMPT_PATH = _BASE / "system_prompt.txt"
+    LYRIC_PROMPT_PATH  = _BASE / "prompt" / "lyric_generation_prompt.md"
+else:
+    # engine.py lives at lyric_studio/core/engine.py
+    # assets/system_prompt.txt  → lyric_studio/assets/system_prompt.txt
+    # prompt/ is one level above lyric_studio/
+    SYSTEM_PROMPT_PATH = Path(__file__).parent.parent / "assets" / "system_prompt.txt"
+    LYRIC_PROMPT_PATH  = Path(__file__).parent.parent.parent / "prompt" / "lyric_generation_prompt.md"
 
 
 def calculate_batches(total_songs: int, batch_size: int = 2) -> list[int]:
     """
     Calculate batch sizes for song generation.
-    
+
     Examples:
         calculate_batches(5, 2) -> [2, 2, 1]
         calculate_batches(10, 2) -> [2, 2, 2, 2, 2]
         calculate_batches(1, 2) -> [1]
-    
+
     Args:
         total_songs: Total number of songs to generate
         batch_size: Maximum songs per batch (default: 2)
-    
+
     Returns:
         List of batch sizes
     """
@@ -200,22 +210,22 @@ def generate_lyrics(
     async def generate_batch(batch_idx: int, batch_size: int, total_batches: int):
         """
         Generate a batch of songs (1 or more).
-        
+
         Args:
             batch_idx: Current batch index (0-based)
             batch_size: Number of songs in this batch
             total_batches: Total number of batches
-        
+
         Returns:
             list[dict]: List of song dicts (empty if parse failed)
             None: If rate limit was hit (signals to stop all processing)
         """
         songs_so_far = len(all_songs)
-        
+
         prog(f"[Batch {batch_idx+1}/{total_batches}] Generating {batch_size} song(s)…")
-        
+
         user_prompt = build_user_prompt(genre, theme, batch_size)
-        
+
         options = ClaudeAgentOptions(
             model=model,
             system_prompt=system_prompt,
@@ -235,22 +245,22 @@ def generate_lyrics(
                 if isinstance(message, StreamEvent):
                     event = message.event
                     event_type = event.get("type", "")
-                    
+
                     if event_type == "content_block_delta":
                         delta = event.get("delta", {})
                         if delta.get("type") == "text_delta":
                             chunk = delta.get("text", "")
                             raw_text += chunk
                             current_line += chunk
-                            
+
                             while "\n" in current_line:
                                 line, current_line = current_line.split("\n", 1)
                                 if line.strip():
                                     prog(f"  {line[:100]}")
-                    
+
                     elif event_type == "message_start":
                         prog(f"  Claude is writing…")
-                    
+
                     elif event_type == "message_stop":
                         if current_line.strip():
                             prog(f"  {current_line[:100]}")
@@ -261,7 +271,7 @@ def generate_lyrics(
                         for block in message.content:
                             if isinstance(block, TextBlock):
                                 raw_text += block.text
-                
+
                 if "usage limit" in raw_text.lower() or "rate limit" in raw_text.lower():
                     limit_msg = check_for_limit_error(raw_text)
                     if limit_msg:
@@ -278,7 +288,7 @@ def generate_lyrics(
                 return []
 
             prog(f"[Batch {batch_idx+1}/{total_batches}] Parsing lyrics…")
-            
+
             if batch_size == 1:
                 # Single song - use simple parser
                 song = parse_single_song(raw_text, genre, theme)
@@ -307,29 +317,29 @@ def generate_lyrics(
     async def generate_all():
         BATCH_SIZE = 2
         batches = calculate_batches(num_songs, BATCH_SIZE)
-        
+
         prog(f"Planning {len(batches)} batch(es) for {num_songs} song(s) (batch size: {BATCH_SIZE})")
-        
+
         for batch_idx, batch_size in enumerate(batches):
             batch_songs = await generate_batch(batch_idx, batch_size, len(batches))
-            
+
             # None means rate limit hit - stop everything
             if batch_songs is None:
                 prog("Stopping due to rate limit.")
                 break
-            
+
             # Empty list means parse error - continue to next batch
             if batch_songs:
                 all_songs.extend(batch_songs)
                 prog(f"Progress: {len(all_songs)}/{num_songs} song(s) completed")
 
     anyio.run(generate_all)
-    
+
     if len(all_songs) < num_songs:
         prog(f"Finished with partial results: {len(all_songs)}/{num_songs} song(s) generated.")
     else:
         prog(f"Finished successfully: {len(all_songs)}/{num_songs} song(s) generated.")
-    
+
     return all_songs
 
 

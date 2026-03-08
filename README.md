@@ -1,19 +1,29 @@
 # AI Lyric Generation System
 
-Generate professional song lyrics using AI with a modern GUI or CLI scripts.
+Generate professional song lyrics using Claude AI with a modern desktop GUI.
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 auto_generated_lyric/
-├── lyric_studio/     # GUI app (RECOMMENDED)
-├── code/             # Legacy CLI scripts
-├── data/             # Sample datasets
-├── prompt/           # AI prompt templates
-└── song/             # Example outputs
+├── lyric_studio/          # Desktop GUI app (main)
+│   ├── main.py            # Entry point — Flet UI
+│   ├── requirements.txt
+│   ├── core/              # Business logic
+│   │   ├── engine.py      # Claude Agent SDK, lyric generation, parsing
+│   │   └── config.py      # Settings, model list, genre list
+│   ├── assets/            # Static resources
+│   │   └── system_prompt.txt
+│   └── deploy/            # Build
+│       └── LyricStudio.spec  # PyInstaller spec (Windows & macOS)
+├── prompt/                # AI prompt templates
+├── data/                  # Sample datasets
+└── song/                  # Example generated outputs
 ```
 
-## 🚀 Quick Start
+## Quick Start
+
+**Requirements:** Python 3.10+, Claude Pro or Max subscription
 
 ```bash
 cd lyric_studio
@@ -21,73 +31,86 @@ pip install -r requirements.txt
 python main.py
 ```
 
-**Requirements:** Python 3.8+, Claude Pro/Max subscription
+The app checks for Claude Code on launch and guides you through login if needed.
 
-## 🎵 Lyric Studio (Main App)
+## Features
 
-Modern desktop GUI with real-time streaming and batch processing.
+- Real-time lyric streaming from Claude
+- 7 genres: Pop, Rock, Country, R&B, Folk, Indie, Hip-Hop
+- 2 models: Opus 4.6 (quality) and Sonnet 4.6 (speed)
+- Batch processing — 2 songs per API call (e.g. 5 songs = 3 calls)
+- Song preview tabs with title, BPM, central metaphor
+- Auto-saves lyrics as `.txt` files to a configurable output folder
 
-**Features:**
-- Real-time lyric streaming
-- Batch processing (2 songs per API call = 50% fewer calls)
-- 10 genres, 2 AI models (Opus 4, Sonnet 4)
-- Auto-scroll logs, song preview tabs
-- Smart error handling, rate limit detection
+## Usage
 
-**Usage:**
-1. Enter theme (e.g., "first love")
+1. Enter a theme (e.g. "first love", "road trip")
 2. Select genre and model
-3. Set song count (1-20)
-4. Click Generate
-5. View songs in tabs
+3. Set song count (1–20)
+4. Click **Generate Lyrics**
+5. Browse results in the song tabs
 
-**First-Time Setup:**
-- App auto-installs Claude Code if needed
-- Login to Claude when prompted
-- Start generating!
+## Build a Standalone Executable
 
-**Batch Processing:**
-- 1 song → 1 call
-- 5 songs → 3 calls (2+2+1)
-- 10 songs → 5 calls (2+2+2+2+2)
+Run from the `lyric_studio/` directory (not from `deploy/`):
 
-## 💻 Legacy CLI (code/)
+### Windows
 
-Original DeepSeek API scripts. Edit `lyric_generated.py` to set API key and parameters, then run.
+```bash
+cd lyric_studio
+pip install pyinstaller
+pyinstaller deploy/LyricStudio.spec
+```
 
-## 📊 Other Folders
+Output: `deploy/dist/LyricStudio.exe`
 
-- **data/** - Sample lyric datasets and benchmarks
-- **prompt/** - AI prompt template with songwriting guidelines
-- **song/** - Example generated songs
+The build script automatically bundles the `claude` CLI binary that ships
+with `claude-agent-sdk`, so the executable works without a separate Claude
+Code installation.
 
-## 🐛 Troubleshooting
+### macOS
 
-**"Claude Code not installed"** → Click "Install" in setup wizard
+```bash
+cd lyric_studio
+pip install pyinstaller
+pyinstaller deploy/LyricStudio.spec
+```
 
-**"Rate limit hit"** → Wait for reset (hourly) or upgrade to Claude Max
+Output: `deploy/dist/LyricStudio.app`
 
-**Songs not saving** → Check Settings → Output Folder permissions
+**First launch on macOS:** Right-click the `.app` and choose **Open** to bypass
+Gatekeeper. Unsigned apps are blocked on double-click the first time.
 
-## 📦 Build Executable
+The same spec file works on both platforms — it detects the OS automatically.
 
-**Recommended Method (Most Reliable):**
+## Troubleshooting
 
-1. Install PyInstaller:
-   ```bash
-   pip install pyinstaller
-   ```
+**"Claude Code is not installed"**
+The app needs the `claude` CLI. Click **Install Claude Code** in the setup
+screen, or install manually: `npm install -g @anthropic-ai/claude-code`.
 
-2. Build using the spec file from the deploy folder:
-   ```bash
-   cd deploy
-   pyinstaller LyricStudio.spec
-   ```
+**App freezes / button stays disabled after clicking Generate**
+This was a known bug fixed in the current version. Make sure you are running
+the latest `engine.py` and `main.py`. The fix ensures errors during generation
+are always shown in the log rather than silently killing the background thread.
 
-**Output:** `deploy/dist/LyricStudio.exe` (Windows) or `deploy/dist/LyricStudio.app` (macOS)
+**"Rate limit hit" or "Usage limit reached"**
+Your Claude account has reached its hourly usage cap. Wait for the reset window
+(shown in the log) or upgrade to Claude Max for higher limits.
 
-**Troubleshooting:** See `PACKAGING_GUIDE.md` for detailed instructions and solutions.
+**Songs not saving**
+Open **Settings** (gear icon) and confirm the Output Folder path exists and is
+writable.
 
----
+**macOS: app quits immediately after opening**
+Run from Terminal to see the error:
+```bash
+/path/to/LyricStudio.app/Contents/MacOS/LyricStudio
+```
+Common causes: missing Claude login (`~/.claude.json` absent) or a corrupted
+build. Re-build with a fresh `pip install`.
 
-**Happy songwriting! 🎵**
+**Windows: antivirus flags the executable**
+PyInstaller executables are sometimes flagged as false positives. Add an
+exclusion for the `deploy/dist/` folder, or run from source with
+`python main.py` instead.

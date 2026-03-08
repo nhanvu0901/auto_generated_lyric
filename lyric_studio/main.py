@@ -9,8 +9,8 @@ import threading
 
 import flet as ft
 
-from config import GENRES, MODELS, load_config, save_config
-from engine import (
+from core.config import GENRES, MODELS, load_config, save_config
+from core.engine import (
     generate_lyrics,
     install_claude_code,
     is_claude_installed,
@@ -156,8 +156,6 @@ def main(page: ft.Page):
         setup_log.controls.append(ft.Text(f"› {msg}", size=12, color=color, selectable=True))
         setup_log.visible = True
         setup_log_card.visible = True
-        # Auto-scroll to bottom
-        setup_log.scroll_to(offset=-1, duration=100)
         page.update()
 
     def do_login(e):
@@ -286,8 +284,6 @@ def main(page: ft.Page):
     def log_gen(msg: str, color: str = DIM):
         gen_log.controls.append(ft.Text(f"› {msg}", size=12, color=color, selectable=True))
         gen_log_card.visible = True
-        # Auto-scroll to bottom
-        gen_log.scroll_to(offset=-1, duration=100)
         page.update()
 
     generate_btn = ft.ElevatedButton(
@@ -440,13 +436,21 @@ def main(page: ft.Page):
                 page.update()
 
             log_gen("Calling Claude Code CLI…")
-            songs = generate_lyrics(
-                genre=genre_label,
-                theme=theme,
-                model=MODELS[model_label],
-                num_songs=count,
-                on_progress=on_progress,
-            )
+            try:
+                songs = generate_lyrics(
+                    genre=genre_label,
+                    theme=theme,
+                    model=MODELS[model_label],
+                    num_songs=count,
+                    on_progress=on_progress,
+                )
+            except Exception as exc:
+                log_gen(f"Fatal error: {exc}", "#FF6B6B")
+                progress_text.value = "Generation failed — see log above."
+                progress_bar.visible  = False
+                generate_btn.disabled = False
+                page.update()
+                return
             generated_songs = songs
 
             if songs:
