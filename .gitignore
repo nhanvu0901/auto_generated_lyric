@@ -6,7 +6,6 @@ __pycache__/
 .Python
 *.egg-info/
 dist/
-!lyric_studio/deploy/dist/
 build/
 .env
 venv/
