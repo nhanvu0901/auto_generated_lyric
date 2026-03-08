@@ -1,9 +1,9 @@
-"""Core lyric generation engine — wraps Claude Code CLI."""
+"""Core lyric generation engine — uses Claude Agent SDK for real-time streaming."""
 
+import asyncio
 import json
 import os
 import re
-import subprocess
 import platform
 import shutil
 from pathlib import Path
@@ -18,7 +18,12 @@ LYRIC_PROMPT_PATH = (
 
 
 def is_claude_installed() -> bool:
-    return shutil.which("claude") is not None
+    """Check if Claude Code CLI is available (bundled with SDK or system-wide)."""
+    try:
+        import claude_agent_sdk
+        return True
+    except ImportError:
+        return shutil.which("claude") is not None
 
 
 LIMIT_PHRASES = [
@@ -60,28 +65,17 @@ def is_claude_logged_in() -> bool:
 
 
 def install_claude_code() -> tuple[bool, str]:
-    """Auto-install Claude Code. Returns (success, message)."""
-    system = platform.system()
+    """Install Claude Agent SDK (includes bundled CLI). Returns (success, message)."""
     try:
-        if system == "Windows":
-            result = subprocess.run(
-                ["powershell", "-Command", "irm https://claude.ai/install.ps1 | iex"],
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-        elif system == "Darwin":
-            result = subprocess.run(
-                ["bash", "-c", "curl -fsSL https://claude.ai/install.sh | bash"],
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-        else:
-            return False, "Unsupported OS. Please install Claude Code manually."
-
+        import subprocess
+        result = subprocess.run(
+            ["pip", "install", "claude-agent-sdk"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
         if result.returncode == 0:
-            return True, "Claude Code installed successfully!"
+            return True, "Claude Agent SDK installed successfully!"
         return False, f"Installation failed:\n{result.stderr or result.stdout}"
     except subprocess.TimeoutExpired:
         return False, "Installation timed out. Please try again."
@@ -92,6 +86,7 @@ def install_claude_code() -> tuple[bool, str]:
 def open_claude_login() -> tuple[bool, str]:
     """Run claude login to authenticate."""
     try:
+        import subprocess
         result = subprocess.run(
             ["claude", "login"],
             capture_output=True,
@@ -149,7 +144,7 @@ def generate_lyrics(
     num_songs: int = 1,
     on_progress=None,
 ) -> list[dict]:
-    """Generate lyrics using Claude Code CLI.
+    """Generate lyrics using Claude Agent SDK with real-time streaming.
 
     Args:
         genre: Music genre
@@ -161,6 +156,15 @@ def generate_lyrics(
     Returns:
         List of song dicts with keys: title, genre, theme, bpm, central_metaphor, lyrics
     """
+    try:
+        import anyio
+        from claude_agent_sdk import query, ClaudeAgentOptions
+        from claude_agent_sdk.types import AssistantMessage, TextBlock, StreamEvent
+    except ImportError:
+        if on_progress:
+            on_progress(0, num_songs, "ERROR: claude-agent-sdk not installed. Run: pip install claude-agent-sdk")
+        return []
+
     system_prompt = SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
     all_songs = []
 
@@ -168,183 +172,101 @@ def generate_lyrics(
         if on_progress:
             on_progress(len(all_songs), num_songs, status)
 
-    # Generate one at a time for better quality and progress tracking
-    for i in range(num_songs):
-        prog(f"[{i+1}/{num_songs}] Building prompt…")
-
+    async def generate_song(index: int):
+        prog(f"[{index+1}/{num_songs}] Building prompt…")
+        
         user_prompt = build_user_prompt(genre, theme, 1)
+        
+        options = ClaudeAgentOptions(
+            model=model,
+            system_prompt=system_prompt,
+            max_turns=1,
+            allowed_tools=[],
+            include_partial_messages=True,
+        )
 
-        cmd = [
-            "claude",
-            "-p",
-            "--model", model,
-            "--tools", "",
-            "--max-turns", "1",
-            "--output-format", "stream-json",
-            "--verbose",
-            "--include-partial-messages",
-            "--system-prompt", system_prompt,
-            user_prompt,
-        ]
+        prog(f"[{index+1}/{num_songs}] Connecting to Claude ({model})…")
 
-        prog(f"[{i+1}/{num_songs}] Connecting to Claude ({model})…")
+        raw_text = ""
+        current_line = ""
+        hit_limit = False
 
-        proc = None
         try:
-            env = os.environ.copy()
-            env.pop("CLAUDECODE", None)
-
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,          # line-buffered for real-time output
-                env=env,
-            )
-
-            raw = ""           # final complete text
-            token_buf = ""     # accumulate partial tokens for log lines
-            hit_limit = False
-
-            while True:
-                line = proc.stdout.readline()
-                if not line:
-                    break
-                line = line.strip()
-                if not line:
-                    continue
-
-                # Non-JSON lines (raw errors/messages)
-                if not line.startswith("{"):
-                    limit_msg = check_for_limit_error(line)
-                    if limit_msg:
-                        prog(f"⚠ LIMIT HIT: {limit_msg}")
-                        prog("Wait for your usage window to reset, then try again.")
-                        hit_limit = True
-                        proc.kill()
-                        break
-                    prog(f"  {line[:200]}")
-                    continue
-
-                try:
-                    event = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-
-                etype = event.get("type", "")
-
-                # ── stream_event: contains token deltas ──
-                if etype == "stream_event":
-                    inner = event.get("event", {})
-                    inner_type = inner.get("type", "")
-
-                    if inner_type == "content_block_delta":
-                        delta = inner.get("delta", {})
+            async for message in query(prompt=user_prompt, options=options):
+                if isinstance(message, StreamEvent):
+                    event = message.event
+                    event_type = event.get("type", "")
+                    
+                    if event_type == "content_block_delta":
+                        delta = event.get("delta", {})
                         if delta.get("type") == "text_delta":
                             chunk = delta.get("text", "")
-                            token_buf += chunk
-                            # Flush complete lines to log
-                            while "\n" in token_buf:
-                                log_line, token_buf = token_buf.split("\n", 1)
-                                if log_line.strip():
-                                    prog(f"  {log_line}")
-
-                    elif inner_type == "message_start":
+                            raw_text += chunk
+                            current_line += chunk
+                            
+                            while "\n" in current_line:
+                                line, current_line = current_line.split("\n", 1)
+                                if line.strip():
+                                    prog(f"  {line[:100]}")
+                    
+                    elif event_type == "message_start":
                         prog(f"  Claude is writing…")
+                    
+                    elif event_type == "message_stop":
+                        if current_line.strip():
+                            prog(f"  {current_line[:100]}")
+                        prog(f"  Generation complete")
 
-                # ── system init ──
-                elif etype == "system" and event.get("subtype") == "init":
-                    prog(f"  Session started")
-
-                # ── rate_limit_event ──
-                elif etype == "rate_limit_event":
-                    info = event.get("rate_limit_info", {})
-                    status = info.get("status", "")
-                    if status != "allowed":
-                        prog(f"⚠ LIMIT HIT: rate limit status = {status}")
-                        prog("Wait for your usage window to reset, then try again.")
-                        hit_limit = True
-                        proc.kill()
-                        break
-
-                # ── final result ──
-                elif etype == "result":
-                    subtype = event.get("subtype", "")
-                    raw = event.get("result", "").strip()
-                    cost = event.get("total_cost_usd")
-                    duration = event.get("duration_ms")
-                    if duration:
-                        prog(f"  Done in {duration/1000:.1f}s" +
-                             (f" · ${cost:.4f}" if cost else ""))
-                    if subtype != "success":
-                        error = event.get("error", subtype)
-                        limit_msg = check_for_limit_error(str(error))
-                        if limit_msg:
-                            prog(f"⚠ LIMIT HIT: {limit_msg}")
-                            hit_limit = True
-                        else:
-                            prog(f"[{i+1}/{num_songs}] Error: {error}")
-
-                # ── assistant message (full or partial) ──
-                elif etype == "assistant":
-                    pass  # tokens already streamed via stream_event
-
-                # ── error event ──
-                elif etype == "error":
-                    msg = str(event.get("error", event))[:300]
-                    limit_msg = check_for_limit_error(msg)
+                elif isinstance(message, AssistantMessage):
+                    if not raw_text:
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                raw_text += block.text
+                
+                if "usage limit" in raw_text.lower() or "rate limit" in raw_text.lower():
+                    limit_msg = check_for_limit_error(raw_text)
                     if limit_msg:
                         prog(f"⚠ LIMIT HIT: {limit_msg}")
+                        prog("Wait for your usage window to reset, then try again.")
                         hit_limit = True
-                        proc.kill()
                         break
-                    prog(f"  Error: {msg}")
-
-            # Flush any remaining token buffer
-            if token_buf.strip():
-                prog(f"  {token_buf.strip()}")
 
             if hit_limit:
-                break
+                return None
 
-            proc.wait(timeout=30)
-            stderr_out = proc.stderr.read().strip()
+            if not raw_text:
+                prog(f"[{index+1}/{num_songs}] No output received — skipping.")
+                return None
 
-            if stderr_out:
-                limit_msg = check_for_limit_error(stderr_out)
-                if limit_msg:
-                    prog(f"⚠ LIMIT HIT: {limit_msg}")
-                    prog("Wait for your usage window to reset, then try again.")
-                    continue
-                prog(f"  stderr: {stderr_out[:300]}")
-
-            if not raw:
-                prog(f"[{i+1}/{num_songs}] No output received — skipping.")
-                continue
-
-            prog(f"[{i+1}/{num_songs}] Parsing lyrics…")
-            songs = parse_songs(raw, genre, theme)
+            prog(f"[{index+1}/{num_songs}] Parsing lyrics…")
+            songs = parse_songs(raw_text, genre, theme)
             if not songs:
-                song = parse_single_song(raw, genre, theme)
+                song = parse_single_song(raw_text, genre, theme)
                 if song:
                     songs = [song]
 
             if songs:
-                prog(f"[{i+1}/{num_songs}] ✓ \"{songs[0]['title']}\"")
-                all_songs.extend(songs)
+                prog(f"[{index+1}/{num_songs}] ✓ \"{songs[0]['title']}\"")
+                return songs[0]
             else:
-                prog(f"[{i+1}/{num_songs}] Could not parse output — skipping.")
+                prog(f"[{index+1}/{num_songs}] Could not parse output — skipping.")
+                return None
 
-        except subprocess.TimeoutExpired:
-            if proc:
-                proc.kill()
-            prog(f"[{i+1}/{num_songs}] Timed out — process killed.")
         except Exception as e:
-            prog(f"[{i+1}/{num_songs}] Exception: {e}")
+            prog(f"[{index+1}/{num_songs}] Exception: {e}")
+            return None
 
+    async def generate_all():
+        for i in range(num_songs):
+            song = await generate_song(i)
+            if song:
+                all_songs.append(song)
+            if "LIMIT HIT" in (on_progress.__self__ if hasattr(on_progress, '__self__') else ''):
+                break
+
+    anyio.run(generate_all)
+    
     prog(f"Finished. {len(all_songs)}/{num_songs} song(s) generated.")
-
     return all_songs
 
 
