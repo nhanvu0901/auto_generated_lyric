@@ -16,6 +16,9 @@ venv/
 .vscode/
 *.iml
 
+# Claude
+lyric_studio/.claude/
+
 # OS
 .DS_Store
 Thumbs.db

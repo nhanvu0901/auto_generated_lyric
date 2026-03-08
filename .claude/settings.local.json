@@ -26,7 +26,9 @@
       "Bash(/Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv/bin/python -c \"import flet; print\\(flet.version.version\\)\")",
       "Bash(uv pip install \"flet[all]==0.28.2\" --python /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv/bin/python -q && echo \"DONE\")",
       "Bash(sed -i '' 's/ft\\\\.icons\\\\./ft.Icons./g' main.py && sed -i '' 's/ft\\\\.colors\\\\./ft.Colors./g' main.py && echo \"DONE\")",
-      "Bash(.venv/bin/python -c \"from engine import generate_lyrics, save_songs, _title_to_filename; print\\(_title_to_filename\\('The Last Tuesday'\\)\\); print\\(_title_to_filename\\('Love/Hate: A Story?'\\)\\); print\\('OK'\\)\")"
+      "Bash(.venv/bin/python -c \"from engine import generate_lyrics, save_songs, _title_to_filename; print\\(_title_to_filename\\('The Last Tuesday'\\)\\); print\\(_title_to_filename\\('Love/Hate: A Story?'\\)\\); print\\('OK'\\)\")",
+      "Bash(git rm:*)",
+      "Bash(git add:*)"
     ]
   }
 }
