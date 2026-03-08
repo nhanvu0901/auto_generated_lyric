@@ -1,7 +1,39 @@
 {
   "permissions": {
     "allow": [
-      "Bash(.venv/Scripts/python:*)"
+      "Bash(.venv/Scripts/python:*)",
+      "Bash(source .venv/bin/activate && python -c \"import flet; print\\(flet.__version__\\); import os; print\\(os.path.dirname\\(flet.__file__\\)\\)\")",
+      "Bash(source .venv/bin/activate && pip show flet && python -c \"import flet; print\\(dir\\(flet\\)\\)\" && find .venv/lib -path \"*/flet*\" -name \"*.py\" | head -20)",
+      "Bash(source .venv/bin/activate && pip list | grep -i flet && pip list | grep -i pyinstaller)",
+      "Bash(source .venv/bin/activate && pip list | grep -i flet; python -c \"import flet\" 2>&1; find .venv/lib -maxdepth 5 -name \"__init__.py\" | xargs grep -l \"flet\" 2>/dev/null | head -5)",
+      "Bash(source .venv/bin/activate && python -c \"import importlib.metadata; print\\(importlib.metadata.version\\('flet'\\)\\)\" 2>&1; ls .venv/lib/python3.12/site-packages/ | grep flet)",
+      "Bash(source .venv/bin/activate && flet --help 2>&1 | head -30; cat .venv/lib/python3.12/site-packages/flet/utils/platform_utils.py)",
+      "Bash(source .venv/bin/activate && flet pack --help 2>&1)",
+      "Bash(source .venv/bin/activate && python -c \"\nimport importlib.util, os, platform\n_sdk_spec = importlib.util.find_spec\\('claude_agent_sdk'\\)\n_cli_name = 'claude.exe' if platform.system\\(\\) == 'Windows' else 'claude'\nif _sdk_spec and _sdk_spec.origin:\n    p = os.path.join\\(os.path.dirname\\(_sdk_spec.origin\\), '_bundled', _cli_name\\)\n    print\\('Claude binary:', p, 'exists:', os.path.exists\\(p\\)\\)\nelse:\n    print\\('claude_agent_sdk not found'\\)\n\")",
+      "WebFetch(domain:flet.dev)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.flet.dev)",
+      "Bash(pip show flet 2>/dev/null | head -20; pip show flet-core 2>/dev/null | head -10; which flet 2>/dev/null)",
+      "Bash(source .venv/bin/activate && pip show flet 2>/dev/null; flet --version 2>/dev/null)",
+      "Bash(source /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv/bin/activate && pip show flet flet-core flet-desktop 2>/dev/null)",
+      "Bash(find /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv -name \"pack.py\" -path \"*/cli/*\" 2>/dev/null; find /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv -name \"*.py\" -path \"*/flet/cli*\" 2>/dev/null | head -20)",
+      "Read(//Users/nhanvu/.pyenv/**)",
+      "Read(//Users/nhanvu/**)",
+      "Bash(python3 -c \"import flet_desktop; print\\(flet_desktop.get_package_bin_dir\\(\\)\\)\" --prefix /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv 2>/dev/null; source /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv/bin/activate && python3 -c \"import flet_desktop; print\\(flet_desktop.get_package_bin_dir\\(\\)\\)\" 2>/dev/null)",
+      "Bash(source /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv/bin/activate && flet pack --help 2>/dev/null)",
+      "Bash(source /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv/bin/activate && python3 -c \"\nimport flet_cli.__pyinstaller.config as hook_config\nfrom flet_cli.__pyinstaller.utils import copy_flet_bin, get_flet_bin_path\nprint\\('bin path:', get_flet_bin_path\\(\\)\\)\nimport os\nbin_path = get_flet_bin_path\\(\\)\nif bin_path:\n    print\\('contents:', os.listdir\\(bin_path\\)\\)\n\" 2>/dev/null)",
+      "Bash(source /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv/bin/activate && python3 -c \"\nimport tarfile\ntar_path = '/Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv/lib/python3.12/site-packages/flet_desktop/app/flet-macos.tar.gz'\nwith tarfile.open\\(tar_path, 'r:gz'\\) as t:\n    names = t.getnames\\(\\)\n    print\\('Top-level entries:', names[:10]\\)\n    print\\('Total:', len\\(names\\)\\)\n\" 2>/dev/null)",
+      "Bash(find /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv -name \"hook-flet*.py\" -o -name \"hook-flet_core*.py\" -o -name \"hook-flet_desktop*.py\" 2>/dev/null | head -20)",
+      "Bash(find /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv -name \"*.py\" -path \"*/PyInstaller/hooks/*flet*\" 2>/dev/null; find /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv -name \"*.py\" -path \"*/pyinstaller_hooks*\" 2>/dev/null | head -10)",
+      "Bash(cat /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv/lib/python3.12/site-packages/flet_cli-0.28.2.dist-info/entry_points.txt 2>/dev/null || find /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/.venv -name \"entry_points.txt\" -path \"*flet*\" 2>/dev/null | xargs grep -l pyinstaller 2>/dev/null)",
+      "Bash(chmod +x /Users/nhanvu/Documents/AI_project/auto_generated_lyric/lyric_studio/deploy/build_mac.sh)",
+      "Bash(bash deploy/build_mac.sh 2>&1)",
+      "Bash(open dist/LyricStudio.app && sleep 3 && echo \"Launched successfully — no terminal window\")",
+      "Bash(source .venv/bin/activate && python -c \"import flet_cli.__pyinstaller as h; import os; print\\(os.path.dirname\\(h.__file__\\)\\)\")",
+      "Bash(ls dist/ && xattr dist/LyricStudio.app 2>/dev/null && echo \"quarantine check done\")",
+      "Bash(open dist/LyricStudio.app && sleep 4 && echo \"Launched OK\")",
+      "Bash(dist/LyricStudio.app/Contents/MacOS/LyricStudio 2>&1; echo \"Exit: $?\")",
+      "Bash(log show --last 2m --process LyricStudio 2>&1 | tail -60)"
     ]
   }
 }

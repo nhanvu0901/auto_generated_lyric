@@ -1,4 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
+# Windows build spec — use deploy/build_mac.sh for macOS instead.
+# On macOS, raw PyInstaller cannot collect flet's hook-flet.py (which
+# bundles the Flutter binary and flet Python package). Use `flet pack`
+# via build_mac.sh to avoid "No module named 'flet'" at runtime and to
+# get a proper .app bundle (no terminal window).
 import importlib.util
 import os
 import platform
