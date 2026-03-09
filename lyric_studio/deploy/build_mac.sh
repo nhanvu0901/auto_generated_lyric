@@ -95,6 +95,13 @@ pyinstaller "${PYI_ARGS[@]}"
 # ── Strip quarantine ───────────────────────────────────────────────────────
 xattr -cr dist/LyricStudio.app 2>/dev/null || true
 
+# ── Ad-hoc re-sign ────────────────────────────────────────────────────────
+# PyInstaller's ad-hoc signature becomes invalid after zip/unzip round-trips.
+# Re-signing here produces a fresh, stable local signature so the distributed
+# zip opens without "damaged and can't be opened" on the recipient's machine.
+echo "Re-signing app bundle (ad-hoc)…"
+codesign --force --deep --sign - dist/LyricStudio.app 2>/dev/null || true
+
 # ── Register with macOS Application Firewall ──────────────────────────────
 # flet starts a local WebSocket server — the firewall prompts for it unless
 # the app is pre-registered. We register both LyricStudio AND the Flet.app
@@ -118,10 +125,19 @@ fi
 
 echo "✓ Firewall rules set — no incoming-connection prompts will appear."
 
+# ── Create distributable zip ───────────────────────────────────────────────
+# ditto preserves the resource fork, symlinks, and code signature that plain
+# zip/tar would strip — which is what causes "damaged" on download.
+rm -f dist/LyricStudio-mac.zip
+echo "Creating dist/LyricStudio-mac.zip…"
+ditto -c -k --keepParent dist/LyricStudio.app dist/LyricStudio-mac.zip
+echo "✓ dist/LyricStudio-mac.zip ready for distribution"
+
 # ── Done ───────────────────────────────────────────────────────────────────
 echo ""
 echo "=============================================="
 echo " Build complete! → dist/LyricStudio.app"
+echo " Distributable → dist/LyricStudio-mac.zip"
 echo " Bundle ID: ${BUNDLE_ID}"
 echo " Firewall: pre-registered (no prompts)"
 echo "=============================================="

@@ -85,6 +85,28 @@ The same spec file works on both platforms — it detects the OS automatically.
 
 ## Troubleshooting
 
+**macOS: "LyricStudio is damaged and can't be opened"** (after downloading)
+
+macOS Gatekeeper quarantines apps downloaded from the internet. Run these three
+commands in Terminal after extracting the zip:
+
+```bash
+# Step 1 — remove quarantine (the actual root cause of "damaged")
+sudo xattr -rd com.apple.quarantine ~/Downloads/LyricStudio.app
+# (it will ask for your Mac password)
+
+# Step 2 — re-sign locally
+codesign --force --deep --sign - ~/Downloads/LyricStudio.app
+
+# Step 3 — open it
+open ~/Downloads/LyricStudio.app
+```
+
+After step 1–2, the app opens normally on every subsequent launch — you only
+need to do this once per download.
+
+---
+
 **"Claude Code is not installed"**
 The app needs the `claude` CLI. Click **Install Claude Code** in the setup
 screen, or install manually: `npm install -g @anthropic-ai/claude-code`.
