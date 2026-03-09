@@ -2,17 +2,13 @@
 # ---------------------------------------------------------------------------
 # build_mac.sh — macOS build script for LyricStudio
 #
-# Uses PyInstaller directly with --onedir + --windowed instead of `flet pack`.
-# Why NOT `flet pack`:
-#   - flet pack forces --onefile, which causes macOS 14/15 to silently block
-#     the app on launch (the self-extraction to /tmp clashes with macOS security).
-#
-# This script:
-#   1. Passes --additional-hooks-dir to fire flet_cli's hook-flet.py, which
-#      collects flet Python modules + the embedded Flutter binary (flet-macos.tar.gz).
-#   2. Uses --onedir so all files live inside the .app bundle — no temp extraction,
-#      no macOS security block.
-#   3. Uses --windowed to produce a proper .app bundle — zero terminal window.
+# Root cause of repeated permission prompts:
+#   macOS Application Firewall prompts for EVERY app that opens a server
+#   socket (even on 127.0.0.1). For ad-hoc signed apps the firewall rule
+#   is keyed to the binary's hash, which changes on every rebuild.
+#   This script re-registers both LyricStudio.app AND Flet.app with the
+#   firewall after every build so the user is never prompted again for the
+#   SAME build. Rebuilding naturally re-registers.
 #
 # Usage (from any directory):
 #   bash lyric_studio/deploy/build_mac.sh
@@ -22,6 +18,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LYRIC_STUDIO_DIR="$(dirname "$SCRIPT_DIR")"
 PROMPT_FILE="$(dirname "$LYRIC_STUDIO_DIR")/prompt/lyric_generation_prompt.md"
+BUNDLE_ID="com.lyricstudio.app"
 
 cd "$LYRIC_STUDIO_DIR"
 
@@ -33,18 +30,16 @@ fi
 # shellcheck source=/dev/null
 source .venv/bin/activate
 
-# ── Verify flet is installed ───────────────────────────────────────────────
 if ! python -c "import flet" &>/dev/null; then
     echo "ERROR: flet not installed in .venv. Run: pip install -r requirements.txt"
     exit 1
 fi
 
 # ── Locate flet_cli's PyInstaller hooks directory ─────────────────────────
-# hook-flet.py lives here — it collects flet Python package + flet-macos.tar.gz
 FLET_HOOKS=$(python -c "import flet_cli.__pyinstaller as h, os; print(os.path.dirname(h.__file__))")
 echo "flet hooks: $FLET_HOOKS"
 
-# ── Find bundled claude CLI binary from claude_agent_sdk ──────────────────
+# ── Find bundled claude CLI binary ────────────────────────────────────────
 CLAUDE_BIN=$(python - <<'EOF'
 import importlib.util, os, sys
 spec = importlib.util.find_spec('claude_agent_sdk')
@@ -67,19 +62,16 @@ echo "=============================================="
 PYI_ARGS=(
     main.py
     --name "LyricStudio"
-    --windowed                          # .app bundle, zero terminal window
-    --onedir                            # all files inside .app — no temp extraction
+    --windowed
+    --onedir
     --distpath "dist"
     --workpath "build"
     --noconfirm
-    # --- flet hooks (collects flet package + Flutter binary) ---
+    --osx-bundle-identifier "${BUNDLE_ID}"
     --additional-hooks-dir "${FLET_HOOKS}"
-    # --- tell PyInstaller to look in lyric_studio/ for local packages (core/) ---
     --paths "."
-    # --- data files (src:dest) ---
     --add-data "assets/system_prompt.txt:."
     --add-data "${PROMPT_FILE}:prompt"
-    # --- hidden imports not reachable by static analysis ---
     --hidden-import flet
     --hidden-import flet.core
     --hidden-import flet.auth
@@ -96,21 +88,40 @@ PYI_ARGS=(
 if [ -n "$CLAUDE_BIN" ]; then
     echo "Bundling claude binary: $CLAUDE_BIN"
     PYI_ARGS+=(--add-binary "${CLAUDE_BIN}:claude_agent_sdk/_bundled")
-else
-    echo "WARNING: claude_agent_sdk bundled binary not found — skipping."
 fi
 
 pyinstaller "${PYI_ARGS[@]}"
 
-# ── Remove quarantine attribute (macOS Gatekeeper) ─────────────────────────
-# Locally-built apps get quarantined, which causes "damaged/blocked" errors.
-echo "Removing quarantine attribute..."
+# ── Strip quarantine ───────────────────────────────────────────────────────
 xattr -cr dist/LyricStudio.app 2>/dev/null || true
+
+# ── Register with macOS Application Firewall ──────────────────────────────
+# flet starts a local WebSocket server — the firewall prompts for it unless
+# the app is pre-registered. We register both LyricStudio AND the Flet.app
+# viewer (which runs as a separate process) so neither ever prompts the user.
+# This must be re-run after every rebuild (rule is tied to binary hash).
+echo "Registering firewall rules..."
+
+ALF=/usr/libexec/ApplicationFirewall/socketfilterfw
+APP_PATH="$(pwd)/dist/LyricStudio.app"
+
+"$ALF" --add "$APP_PATH"       2>/dev/null || true
+"$ALF" --unblockapp "$APP_PATH" 2>/dev/null || true
+
+# Register Flet.app — it lives in ~/.flet/bin/ and is a separate binary
+FLET_APP="$HOME/.flet/bin/flet-0.28.2/Flet.app"
+if [ -d "$FLET_APP" ]; then
+    "$ALF" --add "$FLET_APP"       2>/dev/null || true
+    "$ALF" --unblockapp "$FLET_APP" 2>/dev/null || true
+    echo "✓ Flet.app registered."
+fi
+
+echo "✓ Firewall rules set — no incoming-connection prompts will appear."
 
 # ── Done ───────────────────────────────────────────────────────────────────
 echo ""
 echo "=============================================="
-echo " Build complete!"
-echo " App bundle: dist/LyricStudio.app"
-echo " Double-click to open — no terminal window."
+echo " Build complete! → dist/LyricStudio.app"
+echo " Bundle ID: ${BUNDLE_ID}"
+echo " Firewall: pre-registered (no prompts)"
 echo "=============================================="

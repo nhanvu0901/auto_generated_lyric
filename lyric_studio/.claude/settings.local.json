@@ -33,7 +33,14 @@
       "Bash(ls dist/ && xattr dist/LyricStudio.app 2>/dev/null && echo \"quarantine check done\")",
       "Bash(open dist/LyricStudio.app && sleep 4 && echo \"Launched OK\")",
       "Bash(dist/LyricStudio.app/Contents/MacOS/LyricStudio 2>&1; echo \"Exit: $?\")",
-      "Bash(log show --last 2m --process LyricStudio 2>&1 | tail -60)"
+      "Bash(log show --last 2m --process LyricStudio 2>&1 | tail -60)",
+      "WebSearch",
+      "Bash(security find-identity -v -p codesigning 2>/dev/null | grep -i \"lyric\\\\|local\\\\|self\" | head -5)",
+      "Bash(cat > /tmp/create_ls_cert2.sh << 'SCRIPT'\n#!/usr/bin/env bash\nCERT_NAME=\"LyricStudio\"\nKEY_FILE=\"/tmp/ls_key.pem\"\nCERT_FILE=\"/tmp/ls_cert.pem\"\nP12_FILE=\"/tmp/ls_cert.p12\"\nPASSPHRASE=\"lyricsigning\"\n\n# Config with Code Signing EKU\nOPENSSL_CONF=$\\(mktemp /tmp/ls_ssl_XXXXXX.cnf\\)\ncat > \"$OPENSSL_CONF\" << 'EOF'\n[req]\ndistinguished_name = dn\nx509_extensions    = ext\nprompt             = no\n[dn]\nCN = LyricStudio\n[ext]\nbasicConstraints     = CA:FALSE\nkeyUsage             = critical, digitalSignature\nextendedKeyUsage     = critical, codeSigning\nsubjectKeyIdentifier = hash\nEOF\n\nopenssl req -new -x509 -days 3650 -nodes \\\\\n    -newkey rsa:2048 \\\\\n    -config \"$OPENSSL_CONF\" \\\\\n    -keyout \"$KEY_FILE\" \\\\\n    -out \"$CERT_FILE\" 2>/dev/null\n\n# PKCS12 with a real passphrase\nopenssl pkcs12 -export \\\\\n    -out \"$P12_FILE\" \\\\\n    -inkey \"$KEY_FILE\" \\\\\n    -in \"$CERT_FILE\" \\\\\n    -passout \"pass:${PASSPHRASE}\" 2>/dev/null\n\n# Import into login keychain\nsecurity import \"$P12_FILE\" \\\\\n    -k ~/Library/Keychains/login.keychain-db \\\\\n    -P \"$PASSPHRASE\" \\\\\n    -T /usr/bin/codesign \\\\\n    -f pkcs12 && echo \"Import OK\" || echo \"Import FAILED\"\n\n# Trust cert for code signing\nsecurity add-trusted-cert \\\\\n    -d -r trustRoot \\\\\n    -k ~/Library/Keychains/login.keychain-db \\\\\n    \"$CERT_FILE\" && echo \"Trust OK\" || echo \"Trust FAILED\"\n\nrm -f \"$KEY_FILE\" \"$CERT_FILE\" \"$P12_FILE\" \"$OPENSSL_CONF\"\nSCRIPT\nbash /tmp/create_ls_cert2.sh)",
+      "Bash(security find-identity -v -p codesigning 2>/dev/null | grep \"LyricStudio\")",
+      "Bash(ls -la dist/LyricStudio.app 2>/dev/null && codesign -dvvv dist/LyricStudio.app 2>&1 | grep -E \"Identifier|TeamIdentifier|Signature|designated\")",
+      "Bash(security find-identity -v -p codesigning | grep \"LyricStudio\" && echo \"---identity found---\"\ncodesign --force --deep --sign \"LyricStudio\" dist/LyricStudio.app 2>&1\necho \"Exit: $?\")",
+      "Bash(codesign --force --deep --sign \"LyricStudio\" dist/LyricStudio.app && echo \"OK\")"
     ]
   }
 }
