@@ -9,7 +9,7 @@ import threading
 
 import flet as ft
 
-from core.config import GENRES, MODELS, load_config, save_config
+from core.config import GENRES, MODELS, SUNO_MODELS, load_config, save_config
 from core.engine import (
     generate_lyrics,
     install_claude_code,
@@ -52,6 +52,8 @@ def main(page: ft.Page):
 
     config = load_config()
     generated_songs: list[dict] = []
+    _stop_event: threading.Event | None = None
+    _selected_song_idx: int = 0  # track which pill/song is active
 
     model_names = list(MODELS.keys())
     default_model_name = next(
@@ -294,6 +296,15 @@ def main(page: ft.Page):
         on_click=lambda e: do_generate(e),
     )
 
+    stop_btn = ft.ElevatedButton(
+        "Stop",
+        icon=ft.Icons.STOP_CIRCLE_OUTLINED,
+        bgcolor="#C62828", color=TEXT,
+        height=46,
+        visible=False,
+        on_click=lambda e: do_stop(e),
+    )
+
     reset_btn = ft.OutlinedButton(
         "Reset",
         icon=ft.Icons.REFRESH,
@@ -323,9 +334,108 @@ def main(page: ft.Page):
         on_click=lambda e: do_open_folder(e),
     )
 
+    # ── Suno integration UI ────────────────────────────────────────────────────
+    suno_tags_input = ft.TextField(
+        hint_text="Style tags  e.g. indie rock, guitar, emotional, female vocals",
+        border_color=BORDER,
+        focused_border_color="#7B68EE",
+        bgcolor=SURFACE2,
+        color=TEXT,
+        hint_style=ft.TextStyle(color=DIM),
+        border_radius=10,
+        content_padding=ft.padding.symmetric(horizontal=16, vertical=12),
+        text_size=13,
+        expand=True,
+    )
+
+    suno_model_dd = ft.Dropdown(
+        label="Suno Model",
+        label_style=ft.TextStyle(color=DIM, size=12),
+        border_color=BORDER, focused_border_color="#7B68EE",
+        bgcolor=SURFACE2, color=TEXT, border_radius=10,
+        options=[ft.dropdown.Option(m) for m in SUNO_MODELS],
+        value=next(
+            (n for n, v in SUNO_MODELS.items() if v == config.get("suno_model", "chirp-v4")),
+            list(SUNO_MODELS.keys())[0],
+        ),
+        width=170, text_size=13,
+    )
+
+    suno_generate_btn = ft.ElevatedButton(
+        "Generate in Suno",
+        icon=ft.Icons.MUSIC_NOTE,
+        bgcolor="#6A1B9A", color=TEXT,
+        height=42,
+        visible=False,
+        on_click=lambda e: do_generate_suno(e),
+    )
+
+    suno_status_text = ft.Text("", size=12, color=DIM)
+
+    suno_log = ft.Column([], spacing=3, scroll=ft.ScrollMode.AUTO, height=90)
+    suno_log_card = ft.Container(
+        content=suno_log,
+        bgcolor="#0A0D14",
+        border_radius=8,
+        border=ft.border.all(1, BORDER),
+        padding=ft.padding.symmetric(horizontal=12, vertical=8),
+        visible=False,
+    )
+
+    suno_section = ft.Container(
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Icon(ft.Icons.HEADPHONES, color="#7B68EE", size=16),
+                        ft.Text("Suno Music Generation", size=13, color=DIM,
+                                weight=ft.FontWeight.W_600),
+                        ft.Container(expand=True),
+                        suno_status_text,
+                    ],
+                    spacing=8,
+                ),
+                ft.Container(height=8),
+                ft.Row(
+                    [suno_tags_input, suno_model_dd, suno_generate_btn],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                suno_log_card,
+            ],
+            spacing=6,
+        ),
+        visible=False,
+        bgcolor=SURFACE,
+        border_radius=14,
+        padding=16,
+        border=ft.border.all(1, BORDER),
+    )
+
+    def log_suno(msg: str, color: str = DIM):
+        suno_log.controls.append(ft.Text(f"› {msg}", size=12, color=color, selectable=True))
+        suno_log_card.visible = True
+        page.update()
+
+    def _refresh_suno_section():
+        """Show/hide suno_section based on whether cookie exists & songs are ready."""
+        has_cookie = bool(config.get("suno_cookie", ""))
+        has_songs  = bool(generated_songs)
+        suno_section.visible = has_cookie and has_songs
+        if has_songs and not suno_generate_btn.visible:
+            suno_generate_btn.visible = True
+        # Pre-fill tags from current song genre
+        if has_songs and not suno_tags_input.value:
+            song = generated_songs[_selected_song_idx] if generated_songs else None
+            if song:
+                suno_tags_input.value = song.get("genre", "")
+        page.update()
+
     def show_song(index: int):
+        nonlocal _selected_song_idx
         if index >= len(generated_songs):
             return
+        _selected_song_idx = index
         song = generated_songs[index]
         saved = preview_col.data or []
         saved_name = saved[index].name if index < len(saved) else ""
@@ -382,8 +492,16 @@ def main(page: ft.Page):
         ]
         page.update()
 
+    def do_stop(e):
+        nonlocal _stop_event
+        if _stop_event:
+            _stop_event.set()
+        stop_btn.disabled = True
+        stop_btn.text = "Stopping…"
+        page.update()
+
     def do_generate(e):
-        nonlocal generated_songs
+        nonlocal generated_songs, _stop_event
 
         theme = theme_input.value.strip()
         if not theme:
@@ -402,7 +520,11 @@ def main(page: ft.Page):
             return
         count_tf.error_text = None
 
-        generate_btn.disabled   = True
+        _stop_event = threading.Event()
+        generate_btn.visible    = False
+        stop_btn.visible        = True
+        stop_btn.disabled       = False
+        stop_btn.text           = "Stop"
         reset_btn.visible       = False
         progress_bar.visible    = True
         pills_container.visible = False
@@ -443,12 +565,14 @@ def main(page: ft.Page):
                     model=MODELS[model_label],
                     num_songs=count,
                     on_progress=on_progress,
+                    stop_event=_stop_event,
                 )
             except Exception as exc:
                 log_gen(f"Fatal error: {exc}", "#FF6B6B")
                 progress_text.value = "Generation failed — see log above."
                 progress_bar.visible  = False
-                generate_btn.disabled = False
+                stop_btn.visible      = False
+                generate_btn.visible  = True
                 page.update()
                 return
             generated_songs = songs
@@ -478,13 +602,82 @@ def main(page: ft.Page):
                 reset_btn.visible       = True
                 show_song(0)
                 progress_text.value = f"{len(songs)} song{'s' if len(songs) > 1 else ''} generated"
+                _refresh_suno_section()
             else:
                 log_gen("No songs returned — check Claude Code login and connection.", "#FF6B6B")
                 progress_text.value = "No songs generated — check Claude Code connection."
 
             progress_bar.visible  = False
-            generate_btn.disabled = False
+            stop_btn.visible      = False
+            generate_btn.visible  = True
             page.update()
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def do_generate_suno(e):
+        """Generate the currently selected song in Suno."""
+        if not generated_songs:
+            return
+        song = generated_songs[_selected_song_idx]
+        tags = suno_tags_input.value.strip() or song.get("genre", "pop")
+        model_label = suno_model_dd.value
+        model_id = SUNO_MODELS.get(model_label, "chirp-v4")
+        cookie = config.get("suno_cookie", "")
+        if not cookie:
+            log_suno("No Suno account connected — go to Settings.", "#FF6B6B")
+            return
+
+        suno_generate_btn.disabled = True
+        suno_generate_btn.text = "Generating…"
+        suno_log.controls = []
+        suno_log_card.visible = False
+        suno_status_text.value = "Starting Suno generation…"
+        page.update()
+
+        def _run():
+            try:
+                from core.suno_client import SunoClient
+
+                log_suno(f"Connecting to Suno API…")
+                client = SunoClient(cookie)
+
+                log_suno(f"Submitting \"{song['title']}\" | tags: {tags} | model: {model_id}")
+                clips = client.generate(
+                    lyrics=song["lyrics"],
+                    tags=tags,
+                    title=song["title"],
+                    model=model_id,
+                )
+                clip_ids = [c["id"] for c in clips]
+                log_suno(f"Submitted — {len(clip_ids)} clip(s) rendering…")
+
+                def on_poll(status_msg: str):
+                    suno_status_text.value = status_msg
+                    log_suno(status_msg)
+
+                paths = client.wait_and_download(
+                    clips,
+                    output_dir=config.get("output_folder", ""),
+                    song_title=song["title"],
+                    on_status=on_poll,
+                )
+
+                if paths:
+                    for p in paths:
+                        log_suno(f"Saved: {Path(p).name}", SUCCESS)
+                    suno_status_text.value = f"{len(paths)} MP3(s) saved to output folder"
+                    log_suno(f"Done! Open Output Folder to find your MP3s.", SUCCESS)
+                else:
+                    log_suno("No audio returned — generation may have failed.", "#FF6B6B")
+                    suno_status_text.value = "Generation failed — check log."
+
+            except Exception as exc:
+                log_suno(f"Error: {exc}", "#FF6B6B")
+                suno_status_text.value = "Suno error — see log."
+            finally:
+                suno_generate_btn.disabled = False
+                suno_generate_btn.text = "Generate in Suno"
+                page.update()
 
         threading.Thread(target=_run, daemon=True).start()
 
@@ -504,6 +697,12 @@ def main(page: ft.Page):
         progress_text.value = ""
         progress_bar.visible = False
         theme_input.value = ""
+        suno_section.visible = False
+        suno_log.controls = []
+        suno_log_card.visible = False
+        suno_status_text.value = ""
+        suno_tags_input.value = ""
+        suno_generate_btn.visible = False
         page.update()
 
     def do_open_folder(e):
@@ -530,7 +729,7 @@ def main(page: ft.Page):
                 ft.Row([theme_input]),
                 ft.Container(height=10),
                 ft.Row(
-                    [genre_dd, model_dd, count_tf, ft.Container(expand=True), reset_btn, generate_btn],
+                    [genre_dd, model_dd, count_tf, ft.Container(expand=True), reset_btn, stop_btn, generate_btn],
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=12,
                 ),
@@ -582,6 +781,7 @@ def main(page: ft.Page):
                         pills_container,
                         ft.Container(content=preview_col, expand=True),
                         ft.Row([open_folder_btn], alignment=ft.MainAxisAlignment.END),
+                        suno_section,
                         ft.Container(height=16),
                     ],
                     expand=True,
@@ -636,14 +836,129 @@ def main(page: ft.Page):
         page.overlay.append(folder_picker)
         page.update()
 
+        # ── Suno settings ──────────────────────────────────────────────────────
+        s_suno_email = ft.TextField(
+            label="Suno Email",
+            label_style=ft.TextStyle(color=DIM, size=12),
+            border_color=BORDER, focused_border_color="#7B68EE",
+            bgcolor=SURFACE2, color=TEXT, border_radius=10,
+            value=config.get("suno_email", ""),
+            expand=True, text_size=13,
+            content_padding=ft.padding.symmetric(horizontal=16, vertical=14),
+        )
+        s_suno_password = ft.TextField(
+            label="Suno Password",
+            label_style=ft.TextStyle(color=DIM, size=12),
+            border_color=BORDER, focused_border_color="#7B68EE",
+            bgcolor=SURFACE2, color=TEXT, border_radius=10,
+            value=config.get("suno_password", ""),
+            password=True, can_reveal_password=True,
+            expand=True, text_size=13,
+            content_padding=ft.padding.symmetric(horizontal=16, vertical=14),
+        )
+        s_suno_status = ft.Text(
+            "● Connected" if config.get("suno_cookie") else "○ Not connected",
+            size=12,
+            color=SUCCESS if config.get("suno_cookie") else DIM,
+        )
+        s_suno_connect_btn = ft.ElevatedButton(
+            "Connect Suno Account",
+            icon=ft.Icons.LINK,
+            bgcolor="#6A1B9A", color=TEXT,
+            height=42,
+        )
+        s_suno_log = ft.Column([], spacing=3, scroll=ft.ScrollMode.AUTO, height=80)
+        s_suno_log_card = ft.Container(
+            content=s_suno_log,
+            bgcolor="#0A0D14",
+            border_radius=8,
+            border=ft.border.all(1, BORDER),
+            padding=ft.padding.symmetric(horizontal=12, vertical=8),
+            visible=False,
+        )
+        s_suno_model = ft.Dropdown(
+            label="Suno Default Model",
+            label_style=ft.TextStyle(color=DIM, size=12),
+            border_color=BORDER, focused_border_color="#7B68EE",
+            bgcolor=SURFACE2, color=TEXT, border_radius=10,
+            options=[ft.dropdown.Option(m) for m in SUNO_MODELS],
+            value=next(
+                (n for n, v in SUNO_MODELS.items() if v == config.get("suno_model", "chirp-v4")),
+                list(SUNO_MODELS.keys())[0],
+            ),
+            width=220, text_size=13,
+        )
+
+        def log_suno_connect(msg: str, color: str = DIM):
+            s_suno_log.controls.append(ft.Text(f"› {msg}", size=12, color=color, selectable=True))
+            s_suno_log_card.visible = True
+            page.update()
+
+        def do_connect_suno(e):
+            email = s_suno_email.value.strip()
+            password = s_suno_password.value.strip()
+            if not email or not password:
+                log_suno_connect("Enter email and password first.", "#FF9944")
+                return
+
+            s_suno_connect_btn.disabled = True
+            s_suno_connect_btn.text = "Connecting…"
+            s_suno_log.controls = []
+            s_suno_log_card.visible = False
+            s_suno_status.value = "Connecting…"
+            s_suno_status.color = DIM
+            page.update()
+
+            def _run():
+                import asyncio
+                from core.suno_auth import login_and_get_cookies
+
+                loop = asyncio.new_event_loop()
+                try:
+                    cookie = loop.run_until_complete(
+                        login_and_get_cookies(
+                            email, password,
+                            on_status=lambda m: log_suno_connect(m),
+                        )
+                    )
+                    # Validate the cookie
+                    from core.suno_client import validate_cookie
+                    ok, msg = validate_cookie(cookie)
+                    if ok:
+                        config["suno_email"]    = email
+                        config["suno_password"] = password
+                        config["suno_cookie"]   = cookie
+                        save_config(config)
+                        s_suno_status.value = f"● Connected — {msg}"
+                        s_suno_status.color = SUCCESS
+                        log_suno_connect(f"Connected! {msg}", SUCCESS)
+                    else:
+                        s_suno_status.value = "Connection failed"
+                        s_suno_status.color = "#FF6B6B"
+                        log_suno_connect(f"Validation failed: {msg}", "#FF6B6B")
+                except Exception as exc:
+                    s_suno_status.value = "○ Not connected"
+                    s_suno_status.color = DIM
+                    log_suno_connect(f"Error: {exc}", "#FF6B6B")
+                finally:
+                    loop.close()
+                    s_suno_connect_btn.disabled = False
+                    s_suno_connect_btn.text = "Connect Suno Account"
+                    page.update()
+
+            threading.Thread(target=_run, daemon=True).start()
+
+        s_suno_connect_btn.on_click = do_connect_suno
+
+        # ── Save handler ───────────────────────────────────────────────────────
         def on_save(e):
             config["model"]         = MODELS[s_model.value]
             config["default_genre"] = s_genre.value
             config["output_folder"] = s_output.value
+            config["suno_model"]    = SUNO_MODELS[s_suno_model.value]
             save_config(config)
             model_dd.value  = s_model.value
             genre_dd.value  = s_genre.value
-            # Remove picker from overlay
             page.overlay.remove(folder_picker)
             show_main_view()
 
@@ -675,6 +990,7 @@ def main(page: ft.Page):
                 ft.Container(
                     content=ft.Column(
                         [
+                            # Claude preferences
                             card(
                                 ft.Column(
                                     [
@@ -702,6 +1018,44 @@ def main(page: ft.Page):
                                 padding=24,
                             ),
                             ft.Container(height=12),
+                            # Suno integration
+                            card(
+                                ft.Column(
+                                    [
+                                        ft.Row(
+                                            [
+                                                ft.Icon(ft.Icons.HEADPHONES,
+                                                        color="#7B68EE", size=16),
+                                                ft.Text("Suno Integration", size=13,
+                                                        color=DIM, weight=ft.FontWeight.W_600),
+                                                ft.Container(expand=True),
+                                                s_suno_status,
+                                            ],
+                                            spacing=8,
+                                        ),
+                                        ft.Container(height=12),
+                                        ft.Text(
+                                            "Enter your suno.com email and password. "
+                                            "A browser will open to complete login. "
+                                            "Works with email/password accounts only "
+                                            "(not Google/Discord SSO).",
+                                            size=11, color=DIM,
+                                        ),
+                                        ft.Container(height=10),
+                                        s_suno_email,
+                                        s_suno_password,
+                                        s_suno_model,
+                                        ft.Row(
+                                            [s_suno_connect_btn],
+                                            alignment=ft.MainAxisAlignment.START,
+                                        ),
+                                        s_suno_log_card,
+                                    ],
+                                    spacing=10,
+                                ),
+                                padding=24,
+                            ),
+                            ft.Container(height=12),
                             ft.ElevatedButton(
                                 "Save Settings",
                                 icon=ft.Icons.CHECK,
@@ -710,6 +1064,7 @@ def main(page: ft.Page):
                             ),
                         ],
                         spacing=0,
+                        scroll=ft.ScrollMode.AUTO,
                     ),
                     expand=True,
                     padding=ft.padding.symmetric(horizontal=24, vertical=20),

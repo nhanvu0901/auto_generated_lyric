@@ -9,6 +9,11 @@ DEFAULT_CONFIG = {
     "default_genre": "Pop",
     "file_naming": "numbered",
     "setup_complete": False,
+    # Suno integration
+    "suno_email": "",
+    "suno_password": "",
+    "suno_cookie": "",          # serialized cookie string from nodriver login
+    "suno_model": "chirp-v4",  # default Suno model
 }
 
 MODELS = {
@@ -17,6 +22,12 @@ MODELS = {
 }
 
 GENRES = ["Pop", "Rock", "Country", "R&B", "Folk", "Indie", "Hip-Hop"]
+
+SUNO_MODELS = {
+    "V4 (Recommended)": "chirp-v4",
+    "V4.5 (8-min max)": "chirp-v4-5",
+    "V3.5 (Fast)":      "chirp-v3-5",
+}
 
 CONFIG_DIR = Path.home() / ".lyric_studio"
 CONFIG_FILE = CONFIG_DIR / "settings.json"

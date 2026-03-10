@@ -178,6 +178,7 @@ def generate_lyrics(
     model: str,
     num_songs: int = 1,
     on_progress=None,
+    stop_event=None,
 ) -> list[dict]:
     """Generate lyrics using Claude Agent SDK with real-time streaming.
 
@@ -242,6 +243,10 @@ def generate_lyrics(
 
         try:
             async for message in query(prompt=user_prompt, options=options):
+                if stop_event and stop_event.is_set():
+                    prog("Generation stopped by user.")
+                    return None
+
                 if isinstance(message, StreamEvent):
                     event = message.event
                     event_type = event.get("type", "")
@@ -321,6 +326,10 @@ def generate_lyrics(
         prog(f"Planning {len(batches)} batch(es) for {num_songs} song(s) (batch size: {BATCH_SIZE})")
 
         for batch_idx, batch_size in enumerate(batches):
+            if stop_event and stop_event.is_set():
+                prog("Generation stopped by user.")
+                break
+
             batch_songs = await generate_batch(batch_idx, batch_size, len(batches))
 
             # None means rate limit hit - stop everything

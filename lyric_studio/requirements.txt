@@ -9,3 +9,7 @@ anyio>=3.0.0
 
 # PyInstaller for packaging desktop apps
 pyinstaller>=6.0.0
+
+# Suno automation
+nodriver>=0.35        # stealth browser automation (no Selenium driver detection)
+requests>=2.28.0      # direct HTTP calls to Suno's internal API

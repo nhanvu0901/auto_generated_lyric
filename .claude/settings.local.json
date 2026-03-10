@@ -28,7 +28,19 @@
       "Bash(sed -i '' 's/ft\\\\.icons\\\\./ft.Icons./g' main.py && sed -i '' 's/ft\\\\.colors\\\\./ft.Colors./g' main.py && echo \"DONE\")",
       "Bash(.venv/bin/python -c \"from engine import generate_lyrics, save_songs, _title_to_filename; print\\(_title_to_filename\\('The Last Tuesday'\\)\\); print\\(_title_to_filename\\('Love/Hate: A Story?'\\)\\); print\\('OK'\\)\")",
       "Bash(git rm:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "WebFetch(domain:suno.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:www.reddit.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:apiframe.pro)",
+      "WebFetch(domain:piapi.ai)",
+      "WebFetch(domain:udioapi.pro)",
+      "WebFetch(domain:docs.piapi.ai)",
+      "WebFetch(domain:acedata.cloud)",
+      "WebFetch(domain:deepwiki.com)",
+      "WebFetch(domain:clerk.com)"
     ]
   }
 }
