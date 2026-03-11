@@ -12,6 +12,7 @@ DEFAULT_CONFIG = {
     # Suno integration
     "suno_email": "",
     "suno_password": "",
+    "suno_totp_secret": "",     # Google Authenticator TOTP secret (optional)
     "suno_cookie": "",          # serialized cookie string from nodriver login
     "suno_model": "chirp-v4",  # default Suno model
 }

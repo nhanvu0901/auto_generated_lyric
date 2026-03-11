@@ -13,3 +13,4 @@ pyinstaller>=6.0.0
 # Suno automation
 nodriver>=0.35        # stealth browser automation (no Selenium driver detection)
 requests>=2.28.0      # direct HTTP calls to Suno's internal API
+pyotp>=2.9.0          # TOTP 2FA code generation (optional, only if 2FA is enabled)

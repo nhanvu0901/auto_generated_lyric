@@ -1,17 +1,33 @@
 """Suno authentication via nodriver stealth browser.
 
-Flow:
-  1. Launch visible Chromium (no Selenium — nodriver avoids webdriver detection)
-  2. Navigate to suno.com/sign-in
-  3. Fill email + password in the Clerk-hosted form
-  4. Wait for authenticated redirect
-  5. Extract all cookies via CDP and return them as a serialized string
+Two login paths are supported:
+  A) Email + password  — for accounts created directly on Suno
+  B) Google SSO        — delegates to suno_automation.suno_login
 
-The browser is VISIBLE so the user can solve any hCaptcha challenges.
+The browser is VISIBLE so the user can solve any hCaptcha / 2FA challenges.
 """
 
 import asyncio
 from typing import Callable, Optional
+
+# ── Google SSO path (preferred for Google-linked accounts) ────────────────────
+
+async def login_with_google(
+    email: str,
+    password: str,
+    recovery_email: str = None,
+    totp_secret: str = None,
+    on_status: Optional[Callable[[str], None]] = None,
+) -> str:
+    """Log into Suno via Google SSO. Returns serialized cookie string."""
+    import sys, os
+    # Allow importing suno_automation from sibling folder
+    parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if parent not in sys.path:
+        sys.path.insert(0, parent)
+
+    from suno_automation.suno_login import login_with_google as _login
+    return await _login(email, password, recovery_email, totp_secret, on_status)
 
 
 SUNO_SIGN_IN = "https://suno.com/sign-in"

@@ -95,8 +95,9 @@ class SunoClient:
     def _clerk_headers(self) -> dict:
         return {
             **_BASE_HEADERS,
-            "Authorization": self._cookies.get("__client", ""),
-            "Cookie": _serial(self._cookies),
+            "Origin":  "https://suno.com",
+            "Referer": "https://suno.com/",
+            "Cookie":  _serial(self._cookies),
         }
 
     def _api_headers(self) -> dict:
@@ -116,15 +117,28 @@ class SunoClient:
             f"?__clerk_api_version=2025-11-10"
             f"&_clerk_js_version={CLERK_JS_VER}"
         )
-        r = requests.get(url, headers=self._clerk_headers(), timeout=15)
-        r.raise_for_status()
-        sid = r.json()["response"]["last_active_session_id"]
-        if not sid:
-            raise RuntimeError(
-                "No active Suno session found — cookie may have expired. "
-                "Please reconnect your Suno account in Settings."
-            )
-        return sid
+        last_data = {}
+        for attempt in range(5):
+            if attempt:
+                time.sleep(5)
+            r = requests.get(url, headers=self._clerk_headers(), timeout=15)
+            r.raise_for_status()
+            last_data = r.json()
+            resp = last_data.get("response") or {}
+
+            sid = resp.get("last_active_session_id")
+            if not sid:
+                sessions = resp.get("sessions") or []
+                active = [s for s in sessions if s.get("status") == "active"]
+                sid = (active or sessions or [{}])[0].get("id")
+
+            if sid:
+                return sid
+
+        raise RuntimeError(
+            f"No active Suno session after 5 attempts — "
+            f"last response: {str(last_data)[:300]}"
+        )
 
     def _do_refresh_token(self) -> None:
         url = (
