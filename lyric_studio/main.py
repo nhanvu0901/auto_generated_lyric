@@ -340,13 +340,8 @@ def main(page: ft.Page):
     _folder_songs: list[dict] = []
     _suno_checked: dict[int, bool] = {}
 
-    suno_tags_input = ft.TextField(
-        hint_text="Style tags  e.g. indie rock, guitar, emotional, female vocals",
-        border_color=BORDER, focused_border_color="#7B68EE",
-        bgcolor=SURFACE2, color=TEXT,
-        hint_style=ft.TextStyle(color=DIM),
-        border_radius=10,
-        content_padding=ft.padding.symmetric(horizontal=16, vertical=12),
+    suno_tags_input = ft.TextField(  # kept for reference but hidden
+        visible=False,
         text_size=13, expand=True,
     )
     suno_model_dd = ft.Dropdown(
@@ -370,8 +365,29 @@ def main(page: ft.Page):
     )
     suno_status_text = ft.Text("", size=12, color=DIM)
     suno_log = ft.Column([], spacing=3, scroll=ft.ScrollMode.AUTO, height=90)
+
+    def _copy_suno_log(e):
+        lines = []
+        for ctrl in suno_log.controls:
+            if isinstance(ctrl, ft.Text):
+                lines.append(ctrl.value or "")
+        page.set_clipboard("\n".join(lines))
+        _suno_copy_btn.icon = ft.Icons.CHECK
+        _suno_copy_btn.tooltip = "Copied!"
+        page.update()
+
+    _suno_copy_btn = ft.IconButton(
+        ft.Icons.COPY, icon_color=DIM, icon_size=14,
+        tooltip="Copy log", on_click=_copy_suno_log,
+    )
     suno_log_card = ft.Container(
-        content=suno_log,
+        content=ft.Column([
+            ft.Row([
+                ft.Container(expand=True),
+                _suno_copy_btn,
+            ], spacing=0, height=20),
+            suno_log,
+        ], spacing=2),
         bgcolor="#0A0D14", border_radius=8,
         border=ft.border.all(1, BORDER),
         padding=ft.padding.symmetric(horizontal=12, vertical=8),
@@ -401,7 +417,7 @@ def main(page: ft.Page):
                 suno_song_list,
                 ft.Container(height=6),
                 ft.Row(
-                    [suno_tags_input, suno_model_dd, suno_send_btn],
+                    [suno_model_dd, suno_send_btn],
                     spacing=10,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
@@ -456,7 +472,7 @@ def main(page: ft.Page):
         _folder_songs = []
         _suno_checked.clear()
         if folder:
-            for p in sorted(Path(folder).glob("*.txt")):
+            for p in sorted(Path(folder).rglob("*.txt")):
                 song = _parse_song_file(p)
                 if song:
                     _folder_songs.append(song)
@@ -501,9 +517,12 @@ def main(page: ft.Page):
 
     def _refresh_suno_section():
         has_cookie = bool(config.get("suno_cookie", ""))
-        suno_section.visible = has_cookie
         if has_cookie:
             _reload_song_list()
+            # Show section if there are any txt files in output folder
+            suno_section.visible = len(_folder_songs) > 0
+        else:
+            suno_section.visible = False
         page.update()
 
     def show_song(index: int):
@@ -693,7 +712,6 @@ def main(page: ft.Page):
         selected = [_folder_songs[i] for i, v in _suno_checked.items() if v]
         if not selected:
             return
-        tags     = suno_tags_input.value.strip()
         model_id = SUNO_MODELS.get(suno_model_dd.value, "chirp-v4")
         cookie   = config.get("suno_cookie", "")
         if not cookie:
@@ -704,24 +722,64 @@ def main(page: ft.Page):
         suno_send_btn.text = "Generating…"
         suno_log.controls = []
         suno_log_card.visible = False
+        _suno_copy_btn.icon = ft.Icons.COPY
+        _suno_copy_btn.tooltip = "Copy log"
         suno_status_text.value = f"Starting — {len(selected)} song(s)…"
         page.update()
 
         def _run():
+            import asyncio as _aio
             try:
                 from core.suno_client import SunoClient
-                client = SunoClient(cookie)
+                from core.suno_auth import solve_captcha_via_browser
 
-                for song in selected:
-                    song_tags = tags or song.get("genre", "pop")
-                    log_suno(f"Submitting \"{song['title']}\" | {song_tags}")
-                    clips = client.generate(
-                        lyrics=song["lyrics"],
-                        tags=song_tags,
-                        title=song["title"],
-                        model=model_id,
-                    )
-                    log_suno(f"{len(clips)} clip(s) rendering…")
+                client = SunoClient(cookie, on_log=lambda m: log_suno(m))
+
+                # Check if captcha is required
+                captcha_needed = client.check_captcha_required()
+
+                for song_idx, song in enumerate(selected):
+                    song_tags = song.get("genre", "pop")
+
+                    if captcha_needed:
+                        # Use browser-based flow: browser fills lyrics, user solves
+                        # captcha, generation happens in browser, we get clips back
+                        log_suno(f"Captcha required — opening browser for \"{song['title']}\"…")
+                        suno_status_text.value = f"Solve captcha for \"{song['title']}\"…"
+                        page.update()
+
+                        loop = _aio.new_event_loop()
+                        try:
+                            result = loop.run_until_complete(
+                                solve_captcha_via_browser(
+                                    cookie_str=cookie,
+                                    lyrics=song["lyrics"],
+                                    tags=song_tags,
+                                    title=song["title"],
+                                    on_status=lambda m: log_suno(m),
+                                    timeout=300.0,
+                                )
+                            )
+                        finally:
+                            loop.close()
+
+                        clips = result.get("clips", [])
+                        if not clips:
+                            log_suno(f"No clips returned for \"{song['title']}\"", "#FF6B6B")
+                            continue
+
+                        log_suno(f"{len(clips)} clip(s) rendering…")
+
+                    else:
+                        # No captcha needed — use direct HTTP API
+                        log_suno(f"Submitting \"{song['title']}\" | {song_tags}")
+                        clips = client.generate(
+                            lyrics=song["lyrics"],
+                            tags=song_tags,
+                            title=song["title"],
+                            model=model_id,
+                        )
+                        log_suno(f"{len(clips)} clip(s) rendering…")
 
                     def on_poll(m):
                         suno_status_text.value = m
@@ -767,11 +825,11 @@ def main(page: ft.Page):
         progress_text.value = ""
         progress_bar.visible = False
         theme_input.value = ""
-        suno_section.visible = False
         suno_log.controls = []
         suno_log_card.visible = False
+        _suno_copy_btn.icon = ft.Icons.COPY
+        _suno_copy_btn.tooltip = "Copy log"
         suno_status_text.value = ""
-        suno_tags_input.value = ""
         suno_send_btn.disabled = True
         page.update()
 
@@ -915,31 +973,14 @@ def main(page: ft.Page):
             content_padding=ft.padding.symmetric(horizontal=16, vertical=14),
         )
 
-        s_suno_google_email = ft.TextField(
-            label="Google Email",
-            value=config.get("suno_email", ""),
-            **_tf,
-        )
-        s_suno_google_password = ft.TextField(
-            label="Google Password",
-            value=config.get("suno_password", ""),
-            password=True, can_reveal_password=True,
-            **_tf,
-        )
-        s_suno_totp = ft.TextField(
-            label="Google Authenticator 2FA Secret",
-            value=config.get("suno_totp_secret", ""),
-            password=True, can_reveal_password=True,
-            **_tf,
-        )
         s_suno_status = ft.Text(
             "● Connected" if config.get("suno_cookie") else "○ Not connected",
             size=12,
             color=SUCCESS if config.get("suno_cookie") else DIM,
         )
         s_suno_connect_btn = ft.ElevatedButton(
-            "Connect via Google",
-            icon=ft.Icons.LINK,
+            "Connect to Suno",
+            icon=ft.Icons.OPEN_IN_BROWSER,
             bgcolor="#6A1B9A", color=TEXT,
             height=42,
         )
@@ -977,21 +1018,8 @@ def main(page: ft.Page):
             page.update()
 
         def do_connect_suno(e):
-            email    = s_suno_google_email.value.strip()
-            password = s_suno_google_password.value.strip()
-            totp     = s_suno_totp.value.strip()
-            if not email or not password or not totp:
-                log_suno_connect("Email, password and 2FA secret are all required.", "#FF9944")
-                return
-
-            # Save credentials immediately so they persist across app restarts
-            config["suno_email"]       = email
-            config["suno_password"]    = password
-            config["suno_totp_secret"] = totp
-            save_config(config)
-
             s_suno_connect_btn.disabled = True
-            s_suno_connect_btn.text = "Connecting…"
+            s_suno_connect_btn.text = "Waiting for login…"
             s_suno_log.controls = []
             s_suno_log_card.visible = False
             s_suno_status.value = "Connecting…"
@@ -1000,24 +1028,19 @@ def main(page: ft.Page):
 
             def _run():
                 import asyncio
-                from core.suno_auth import login_with_google
+                from core.suno_auth import login_and_get_cookies
                 from core.suno_client import validate_cookie
 
                 loop = asyncio.new_event_loop()
                 try:
                     cookie = loop.run_until_complete(
-                        login_with_google(
-                            email, password,
-                            totp_secret=totp or None,
+                        login_and_get_cookies(
                             on_status=lambda m: log_suno_connect(m),
                         )
                     )
                     ok, msg = validate_cookie(cookie)
                     if ok:
-                        config["suno_email"]       = email
-                        config["suno_password"]    = password
-                        config["suno_totp_secret"] = totp
-                        config["suno_cookie"]      = cookie
+                        config["suno_cookie"] = cookie
                         save_config(config)
                         s_suno_status.value = f"● Connected — {msg}"
                         s_suno_status.color = SUCCESS
@@ -1035,22 +1058,17 @@ def main(page: ft.Page):
                 finally:
                     loop.close()
                     s_suno_connect_btn.disabled = False
-                    s_suno_connect_btn.text = "Connect via Google"
+                    s_suno_connect_btn.text = "Connect to Suno"
                     page.update()
 
             threading.Thread(target=_run, daemon=True).start()
 
         def do_disconnect(e):
-            config["suno_email"]    = ""
-            config["suno_password"] = ""
-            config["suno_cookie"]   = ""
+            config["suno_cookie"] = ""
             save_config(config)
             s_suno_status.value = "○ Not connected"
             s_suno_status.color = DIM
             s_suno_disconnect_btn.visible = False
-            s_suno_google_email.value = ""
-            s_suno_google_password.value = ""
-            s_suno_totp.value = ""
             s_suno_log.controls = []
             s_suno_log_card.visible = False
             _refresh_suno_section()
@@ -1145,15 +1163,12 @@ def main(page: ft.Page):
                                         ),
                                         ft.Container(height=8),
                                         ft.Text(
-                                            "Sign in with your Google account linked to Suno. "
-                                            "Enter your Google email, password, and the secret key "
-                                            "from your Google Authenticator app. All three fields are required.",
+                                            "Click Connect to open a browser window. "
+                                            "Log in to Suno using any method (Google, Discord, email, etc.). "
+                                            "Cookies will be captured automatically once you're signed in.",
                                             size=11, color=DIM,
                                         ),
                                         ft.Container(height=6),
-                                        s_suno_google_email,
-                                        s_suno_google_password,
-                                        s_suno_totp,
                                         ft.Row(
                                             [s_suno_connect_btn],
                                             alignment=ft.MainAxisAlignment.START,
@@ -1205,6 +1220,7 @@ def main(page: ft.Page):
     def show_main_view():
         page.controls.clear()
         page.add(main_view)
+        _refresh_suno_section()
         page.update()
 
     def show_settings_view():

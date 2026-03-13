@@ -15,15 +15,14 @@ import time
 import uuid
 import threading
 import requests
-from http.cookies import SimpleCookie
 from pathlib import Path
 from typing import Callable, Optional
 
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-CLERK_BASE      = "https://clerk.suno.com"
-CLERK_JS_VER    = "4.73.2"
+CLERK_BASE      = "https://auth.suno.com"
+CLERK_JS_VER    = "5.117.0"
 STUDIO_BASE     = "https://studio-api.prod.suno.com"
 DEFAULT_MODEL   = "chirp-v4"
 
@@ -57,9 +56,21 @@ SUNO_MODELS = {
 # ── Cookie helpers ─────────────────────────────────────────────────────────────
 
 def _parse_cookie_str(cookie_str: str) -> dict[str, str]:
-    sc = SimpleCookie()
-    sc.load(cookie_str)
-    return {k: m.value for k, m in sc.items() if m.value}
+    """Parse a 'name=value; name2=value2' cookie string.
+
+    Uses simple string splitting instead of SimpleCookie because
+    SimpleCookie silently corrupts values containing special characters
+    (e.g. the Clerk __client cookie).
+    """
+    result = {}
+    for part in cookie_str.split(";"):
+        part = part.strip()
+        if "=" in part:
+            name, value = part.split("=", 1)
+            name = name.strip()
+            if name and value:
+                result[name] = value
+    return result
 
 
 def _serial(cookies: dict[str, str]) -> str:
@@ -79,16 +90,24 @@ class SunoClient:
         credits = client.get_credits()
     """
 
-    def __init__(self, cookie_str: str) -> None:
+    def __init__(self, cookie_str: str, on_log: Optional[Callable[[str], None]] = None) -> None:
         self._cookies: dict[str, str] = _parse_cookie_str(cookie_str)
         self._device_id: str = str(uuid.uuid4())
         self._session_id: Optional[str] = None
         self._token: Optional[str] = None
         self._lock = threading.Lock()
+        self._on_log = on_log
 
+        self._log(f"Parsed {len(self._cookies)} cookies, has __client: {'__client' in self._cookies}")
         self._session_id = self._fetch_session_id()
+        self._log(f"Session ID: {self._session_id}")
         self._do_refresh_token()
+        self._log(f"JWT obtained: {len(self._token or '')} chars")
         self._start_keepalive()
+
+    def _log(self, msg: str) -> None:
+        if self._on_log:
+            self._on_log(msg)
 
     # ── Auth internals ─────────────────────────────────────────────────────────
 
@@ -180,6 +199,23 @@ class SunoClient:
             "monthly_usage": d.get("monthly_usage"),
         }
 
+    def check_captcha_required(self) -> bool:
+        """Check if Suno requires hCaptcha for generation."""
+        self._do_refresh_token()
+        try:
+            r = requests.post(
+                f"{STUDIO_BASE}/api/c/check",
+                json={"ctype": "generation"},
+                headers=self._api_headers(),
+                timeout=15,
+            )
+            data = r.json()
+            self._log(f"Captcha check: {data}")
+            return data.get("required", False)
+        except Exception as e:
+            self._log(f"Captcha check failed: {e}")
+            return False
+
     def generate(
         self,
         lyrics: str,
@@ -188,41 +224,54 @@ class SunoClient:
         model: str = DEFAULT_MODEL,
         make_instrumental: bool = False,
         negative_tags: str = "",
+        captcha_token: str = "",
     ) -> list[dict]:
         """
         Submit a custom-lyrics generation request.
 
         Returns a list of clip dicts (Suno always returns 2 clips).
         Each dict has at minimum: id, status, title.
+
+        If captcha_token is provided, it will be included in the payload.
         """
         self._do_refresh_token()
+        self._log(f"JWT refreshed: {len(self._token or '')} chars")
         payload = {
             "prompt": lyrics,
             "tags": tags,
             "title": title,
-            "negative_tags": negative_tags,
             "mv": model,
             "make_instrumental": make_instrumental,
-            "generation_type": "TEXT",
-            "continue_clip_id": None,
-            "continue_at": None,
-            "infill_start_s": None,
-            "infill_end_s": None,
-            "task": None,
-            "token": "",  # empty = rely on session trust; fill with hCaptcha if 403
         }
+        if negative_tags:
+            payload["negative_tags"] = negative_tags
+        if captcha_token:
+            payload["token"] = captcha_token
+            self._log("Including captcha token in request")
+        headers = self._api_headers()
+        self._log(f"Model: {model}, Title: {title}, Tags: {tags}")
         r = requests.post(
             f"{STUDIO_BASE}/api/generate/v2/",
             json=payload,
-            headers=self._api_headers(),
+            headers=headers,
             timeout=30,
         )
+        self._log(f"Response: {r.status_code}")
         if r.status_code == 402:
             raise RuntimeError("Insufficient Suno credits.")
         if r.status_code == 403:
             raise RuntimeError(
                 "Suno returned 403 — session may have expired. "
                 "Please reconnect your account in Settings."
+            )
+        if r.status_code == 422:
+            detail = ""
+            try:
+                detail = r.text[:500]
+            except Exception:
+                pass
+            raise RuntimeError(
+                f"Suno returned 422 — {detail}"
             )
         r.raise_for_status()
         clips = r.json().get("clips", [])

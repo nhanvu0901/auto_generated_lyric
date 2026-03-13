@@ -40,7 +40,11 @@
       "Bash(security find-identity -v -p codesigning 2>/dev/null | grep \"LyricStudio\")",
       "Bash(ls -la dist/LyricStudio.app 2>/dev/null && codesign -dvvv dist/LyricStudio.app 2>&1 | grep -E \"Identifier|TeamIdentifier|Signature|designated\")",
       "Bash(security find-identity -v -p codesigning | grep \"LyricStudio\" && echo \"---identity found---\"\ncodesign --force --deep --sign \"LyricStudio\" dist/LyricStudio.app 2>&1\necho \"Exit: $?\")",
-      "Bash(codesign --force --deep --sign \"LyricStudio\" dist/LyricStudio.app && echo \"OK\")"
+      "Bash(codesign --force --deep --sign \"LyricStudio\" dist/LyricStudio.app && echo \"OK\")",
+      "WebFetch(domain:ultrafunkamsterdam.github.io)",
+      "WebFetch(domain:deepwiki.com)",
+      "WebFetch(domain:hookgenius.app)",
+      "WebFetch(domain:lobehub.com)"
     ]
   }
 }
