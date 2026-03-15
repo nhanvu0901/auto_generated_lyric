@@ -40,7 +40,30 @@
       "WebFetch(domain:docs.piapi.ai)",
       "WebFetch(domain:acedata.cloud)",
       "WebFetch(domain:deepwiki.com)",
-      "WebFetch(domain:clerk.com)"
+      "WebFetch(domain:clerk.com)",
+      "Bash(cd:*)",
+      "Bash(ls:*)",
+      "WebFetch(domain:suno-api.org)",
+      "WebFetch(domain:aimlapi.com)",
+      "WebFetch(domain:old-docs.sunoapi.org)",
+      "WebFetch(domain:defapi.org)",
+      "WebFetch(domain:rapidapi.com)",
+      "WebFetch(domain:sunoapi.org)",
+      "WebFetch(domain:seclists.org)",
+      "WebFetch(domain:docs.sunoapi.org)",
+      "WebFetch(domain:elevenlabs.io)",
+      "WebFetch(domain:news.ycombinator.com)",
+      "WebFetch(domain:classyshivy.github.io)",
+      "WebFetch(domain:platform.mureka.ai)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:blog.laozhang.ai)",
+      "WebFetch(domain:docs.kie.ai)",
+      "WebFetch(domain:docs.capsolver.com)",
+      "WebFetch(domain:f.openai-hk.com)",
+      "WebFetch(domain:2captcha.com)",
+      "WebFetch(domain:www.cometapi.com)",
+      "WebFetch(domain:docs.rixapi.com)",
+      "WebFetch(domain:www.nikeshoebot.com)"
     ]
   }
 }

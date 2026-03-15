@@ -24,7 +24,7 @@ from typing import Callable, Optional
 CLERK_BASE      = "https://auth.suno.com"
 CLERK_JS_VER    = "5.117.0"
 STUDIO_BASE     = "https://studio-api.prod.suno.com"
-DEFAULT_MODEL   = "chirp-v4"
+DEFAULT_MODEL   = "chirp-auk"
 
 _UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -43,13 +43,18 @@ _BASE_HEADERS = {
 }
 
 # Generation status values returned by Suno
-TERMINAL_STATUSES = {"streaming", "complete", "error"}
+# "streaming" = audio still encoding, "complete" = ready to download
+TERMINAL_STATUSES = {"complete", "error"}
 
-# Available Suno model versions
+# Available Suno model versions (mv parameter)
 SUNO_MODELS = {
-    "V4 (Recommended)": "chirp-v4",
-    "V4.5 (8-min max)": "chirp-v4-5",
-    "V3.5 (Fast)":      "chirp-v3-5",
+    "V4.5-All (Free)":      "chirp-auk",           # 10 credits, 8 min max
+    "V4.5 Turbo (Pro)":     "chirp-auk-turbo",     # 8 credits, ~4 min, faster
+    "V4.5+ (Pro)":          "chirp-bluejay",       # 10 credits, 8 min max
+    "V5 (Pro)":             "chirp-crow",          # 12 credits, 8 min+
+    "V4 (Legacy)":          "chirp-v4",            # 8 credits, 4 min max
+    "V3.5 (Legacy)":        "chirp-v3-5",          # 5 credits, 4 min max
+    "V3 (Legacy)":          "chirp-v3-0",          # 5 credits, 2 min max
 }
 
 

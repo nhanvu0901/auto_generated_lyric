@@ -739,7 +739,13 @@ def main(page: ft.Page):
                 captcha_needed = client.check_captcha_required()
 
                 for song_idx, song in enumerate(selected):
-                    song_tags = song.get("genre", "pop")
+                    # Build rich style tags from all song metadata
+                    tag_parts = [song.get("genre", "")]
+                    if song.get("bpm"):
+                        tag_parts.append(f"{song['bpm']} bpm")
+                    if song.get("theme"):
+                        tag_parts.append(song["theme"])
+                    song_tags = ", ".join(p for p in tag_parts if p) or "pop"
 
                     if captcha_needed:
                         # Use browser-based flow: browser fills lyrics, user solves

@@ -14,7 +14,7 @@ DEFAULT_CONFIG = {
     "suno_password": "",
     "suno_totp_secret": "",     # Google Authenticator TOTP secret (optional)
     "suno_cookie": "",          # serialized cookie string from nodriver login
-    "suno_model": "chirp-v4",  # default Suno model
+    "suno_model": "chirp-auk",  # default: V4.5-All (free tier)
 }
 
 MODELS = {
@@ -25,9 +25,16 @@ MODELS = {
 GENRES = ["Pop", "Rock", "Country", "R&B", "Folk", "Indie", "Hip-Hop"]
 
 SUNO_MODELS = {
-    "V4 (Recommended)": "chirp-v4",
-    "V4.5 (8-min max)": "chirp-v4-5",
-    "V3.5 (Fast)":      "chirp-v3-5",
+    # Free tier
+    "V4.5-All (Free)":          "chirp-auk",           # 10 credits, 8 min max
+    # Pro / Premier only
+    "V4.5 Turbo (Pro)":         "chirp-auk-turbo",     # 8 credits, ~4 min, faster
+    "V4.5+ (Pro)":              "chirp-bluejay",       # 10 credits, 8 min max
+    "V5 (Pro)":                 "chirp-crow",          # 12 credits, 8 min+
+    # Legacy (deprecated for free users)
+    "V4 (Legacy)":              "chirp-v4",            # 8 credits, 4 min max
+    "V3.5 (Legacy)":            "chirp-v3-5",          # 5 credits, 4 min max
+    "V3 (Legacy)":              "chirp-v3-0",          # 5 credits, 2 min max
 }
 
 CONFIG_DIR = Path.home() / ".lyric_studio"
