@@ -63,7 +63,9 @@
       "WebFetch(domain:2captcha.com)",
       "WebFetch(domain:www.cometapi.com)",
       "WebFetch(domain:docs.rixapi.com)",
-      "WebFetch(domain:www.nikeshoebot.com)"
+      "WebFetch(domain:www.nikeshoebot.com)",
+      "WebFetch(domain:docs.aimlapi.com)",
+      "WebFetch(domain:help.suno.com)"
     ]
   }
 }

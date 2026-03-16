@@ -11,7 +11,7 @@ from pathlib import Path
 
 import flet as ft
 
-from core.config import GENRES, MODELS, SUNO_MODELS, load_config, save_config
+from core.config import GENRES, MODELS, load_config, save_config
 from core.engine import (
     generate_lyrics,
     install_claude_code,
@@ -344,18 +344,6 @@ def main(page: ft.Page):
         visible=False,
         text_size=13, expand=True,
     )
-    suno_model_dd = ft.Dropdown(
-        label="Suno Model",
-        label_style=ft.TextStyle(color=DIM, size=12),
-        border_color=BORDER, focused_border_color="#7B68EE",
-        bgcolor=SURFACE2, color=TEXT, border_radius=10,
-        options=[ft.dropdown.Option(m) for m in SUNO_MODELS],
-        value=next(
-            (n for n, v in SUNO_MODELS.items() if v == config.get("suno_model", "chirp-v4")),
-            list(SUNO_MODELS.keys())[0],
-        ),
-        width=170, text_size=13,
-    )
     suno_send_btn = ft.ElevatedButton(
         "Generate Selected (0)",
         icon=ft.Icons.MUSIC_NOTE,
@@ -417,7 +405,7 @@ def main(page: ft.Page):
                 suno_song_list,
                 ft.Container(height=6),
                 ft.Row(
-                    [suno_model_dd, suno_send_btn],
+                    [suno_send_btn],
                     spacing=10,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
@@ -712,7 +700,7 @@ def main(page: ft.Page):
         selected = [_folder_songs[i] for i, v in _suno_checked.items() if v]
         if not selected:
             return
-        model_id = SUNO_MODELS.get(suno_model_dd.value, "chirp-v4")
+        model_id = "chirp-v4"
         cookie   = config.get("suno_cookie", "")
         if not cookie:
             log_suno("No Suno account connected — go to Settings.", "#FF6B6B")
@@ -1005,19 +993,6 @@ def main(page: ft.Page):
             padding=ft.padding.symmetric(horizontal=12, vertical=8),
             visible=False,
         )
-        s_suno_model = ft.Dropdown(
-            label="Suno Default Model",
-            label_style=ft.TextStyle(color=DIM, size=12),
-            border_color=BORDER, focused_border_color="#7B68EE",
-            bgcolor=SURFACE2, color=TEXT, border_radius=10,
-            options=[ft.dropdown.Option(m) for m in SUNO_MODELS],
-            value=next(
-                (n for n, v in SUNO_MODELS.items() if v == config.get("suno_model", "chirp-v4")),
-                list(SUNO_MODELS.keys())[0],
-            ),
-            width=220, text_size=13,
-        )
-
         def log_suno_connect(msg: str, color: str = DIM):
             s_suno_log.controls.append(ft.Text(f"› {msg}", size=12, color=color, selectable=True))
             s_suno_log_card.visible = True
@@ -1088,7 +1063,6 @@ def main(page: ft.Page):
             config["model"]         = MODELS[s_model.value]
             config["default_genre"] = s_genre.value
             config["output_folder"] = s_output.value
-            config["suno_model"]    = SUNO_MODELS[s_suno_model.value]
             save_config(config)
             model_dd.value  = s_model.value
             genre_dd.value  = s_genre.value
@@ -1180,7 +1154,6 @@ def main(page: ft.Page):
                                             alignment=ft.MainAxisAlignment.START,
                                         ),
                                         ft.Container(height=4),
-                                        s_suno_model,
                                         s_suno_log_card,
                                     ],
                                     spacing=8,

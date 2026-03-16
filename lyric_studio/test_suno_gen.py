@@ -1,17 +1,15 @@
 """
-Standalone Suno music generation experiment.
+Standalone Suno music generation via browser automation.
 
-Uses saved cookie (confirmed working) + nodriver browser to:
-1. Open suno.com/create with cookies injected
-2. Ensure Advanced mode is active
-3. Fill lyrics (data-testid="lyrics-textarea"), title, style tags (textarea maxlength=1000)
-4. Click Create (aria-label="Create song")
-5. User solves captcha (if any) in the browser
-6. Intercept the generate/v2 network request via CDP
-7. Capture the response (clips with audio URLs)
-8. Poll until clips are ready, download MP3s
+Flow per song:
+  1. Launch browser with saved cookies → navigate to suno.com/create
+  2. Switch to Advanced mode, fill lyrics/title/style tags
+  3. Click Create → user solves captcha if prompted
+  4. Intercept the generate/v2 response via CDP to get clip IDs
+  5. Poll clips via SunoClient HTTP API until complete
+  6. Download MP3s, skip clips under 90s
 
-Run: .venv/bin/python3 test_suno_gen.py
+Run:  python test_suno_gen.py
 """
 
 import asyncio
@@ -20,7 +18,6 @@ import re
 import sys
 import time
 from pathlib import Path
-from urllib.parse import urlparse
 
 # ── Load config + cookie ──────────────────────────────────────────────────────
 
@@ -34,16 +31,17 @@ if not COOKIE_STR:
     print("ERROR: No suno_cookie. Run the app and connect your account first.")
     sys.exit(1)
 
-# ── The 3 test songs ──────────────────────────────────────────────────────────
+# ── Song files to generate ───────────────────────────────────────────────────
 
 SONG_FILES = [
-    "/Users/nhanvu/Documents/AI_project/auto_generated_lyric/song/beside_the_door.txt",
-    "/Users/nhanvu/Documents/AI_project/auto_generated_lyric/song/blueprint_for_two.txt",
-    "/Users/nhanvu/Documents/AI_project/auto_generated_lyric/song/borrowed_line.txt",
+    r"D:\Code-project\Python\auto_generated_lyric\song\fold_a_map.txt",
+    r"D:\Code-project\Python\auto_generated_lyric\song\folded_in_threes.txt",
+    r"D:\Code-project\Python\auto_generated_lyric\song\frequency.txt",
 ]
 
 
 def parse_song_file(path: str) -> dict:
+    """Parse a song .txt file into {title, lyrics, tags, file}."""
     text = Path(path).read_text(encoding="utf-8")
     footer = re.search(r"^Title:", text, re.MULTILINE)
     lyrics = text[:footer.start()].strip() if footer else text.strip()
@@ -57,15 +55,13 @@ def parse_song_file(path: str) -> dict:
     bpm   = bpm_m.group(1) if bpm_m else ""
     theme = theme_m.group(1).strip() if theme_m else ""
 
-    # Build tags from metadata
     tag_parts = [genre]
     if bpm:
         tag_parts.append(f"{bpm} bpm")
     if theme:
         tag_parts.append(theme)
-    tags = ", ".join(tag_parts)
 
-    return {"title": title, "lyrics": lyrics, "tags": tags, "file": path}
+    return {"title": title, "lyrics": lyrics, "tags": ", ".join(tag_parts), "file": path}
 
 
 SONGS = [parse_song_file(f) for f in SONG_FILES]
@@ -75,20 +71,36 @@ for s in SONGS:
     print(f"  • {s['title']} — tags: {s['tags']}")
 print()
 
-# ── Browser-based generation (one song at a time) ────────────────────────────
+# ── Shared helpers ────────────────────────────────────────────────────────────
 
 SUNO_CREATE = "https://suno.com/create"
-SUNO_COOKIE_DOMAINS = {"suno.com", ".suno.com", "clerk.suno.com"}
 
 
 def log(msg: str):
     print(f"  [{msg}]")
 
 
+def _react_fiber_set(js_field_selector: str, value_expr: str, element_proto: str = "HTMLTextAreaElement") -> str:
+    """
+    Build JS that sets a React controlled input's value by walking the fiber
+    tree and calling onChange directly.  This is the only approach that reliably
+    updates React 18+ controlled components on Suno — native setter + InputEvent
+    and execCommand both fail or get wiped on the next render cycle.
+
+    Returns a JS IIFE string (for use with tab.evaluate).
+    """
+    # NOTE: this is a template used by the style tags fill; lyrics and title
+    # use the simpler native-setter approach because those happen to work.
+    pass  # Not used as a function — the pattern is inlined where needed.
+
+
+# ── Browser-based generation (one song at a time) ────────────────────────────
+
+
 async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dict]:
     """
     Open browser → inject cookies → fill form → click Create →
-    user solves captcha → intercept generate/v2 → return clips.
+    intercept generate/v2 via CDP → return clip dicts.
     """
     import nodriver as uc
     from nodriver import cdp
@@ -141,7 +153,7 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
         tab = await browser.get(SUNO_CREATE)
         await asyncio.sleep(6)
 
-        # Stealth
+        # Hide webdriver flag from bot detection
         try:
             await tab.evaluate("""
                 Object.defineProperty(navigator, 'webdriver', {
@@ -151,145 +163,73 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
         except Exception:
             pass
 
-        # Check URL
         current_url = await tab.evaluate("window.location.href")
         log(f"Current URL: {current_url}")
         if "/sign-in" in str(current_url):
             raise RuntimeError("Redirected to sign-in — cookies expired!")
 
-        # ── Dump page elements ────────────────────────────────────────────────
+        # ── Scan page elements (debug) ─────────────────────────────────────────
+        # Only log textareas — those are the fields we need to fill.
+        # Buttons/inputs are too noisy and rarely useful for debugging.
         log("Scanning page elements…")
         dump = await tab.evaluate("""
             JSON.stringify({
                 textareas: [...document.querySelectorAll('textarea')].map(t => ({
                     cls: t.className, ph: t.placeholder || '',
-                    vis: t.offsetParent !== null, rows: t.rows
-                })),
-                inputs: [...document.querySelectorAll('input')]
-                    .filter(i => i.offsetParent !== null)
-                    .map(i => ({ type: i.type, ph: i.placeholder || '' })),
-                buttons: [...document.querySelectorAll('button')]
-                    .filter(b => b.offsetParent !== null)
-                    .map(b => ({
-                        text: b.textContent.trim().substring(0, 50),
-                        aria: b.getAttribute('aria-label') || '',
-                        disabled: b.disabled
-                    }))
+                    vis: t.offsetParent !== null
+                }))
             })
         """)
         try:
             info = json.loads(dump)
         except Exception:
             info = {}
-            log(f"Raw dump: {str(dump)[:300]}")
-
-        log(f"Found: {len(info.get('textareas',[]))} textareas, "
-            f"{len(info.get('inputs',[]))} inputs, "
-            f"{len(info.get('buttons',[]))} buttons")
+        log(f"Found: {len(info.get('textareas',[]))} textareas")
         for ta in info.get("textareas", []):
-            log(f"  TEXTAREA cls='{ta.get('cls','')}' ph='{ta.get('ph','')}' vis={ta.get('vis')}")
-        for inp in info.get("inputs", []):
-            log(f"  INPUT type='{inp.get('type','')}' ph='{inp.get('ph','')}'")
-        for btn in info.get("buttons", [])[:20]:
-            log(f"  BUTTON text='{btn.get('text','')}' aria='{btn.get('aria','')}' disabled={btn.get('disabled')}")
+            log(f"  TEXTAREA ph='{ta.get('ph','')}' vis={ta.get('vis')}")
 
         # ── Switch to Advanced mode ───────────────────────────────────────────
-        # Suno checks event.isTrusted — both JS .click() and nodriver CDP clicks
-        # get filtered. Solution: call React's onClick handler directly via
-        # __reactProps$ on the DOM node, bypassing event dispatch entirely.
+        # Suno filters untrusted events (isTrusted check). We bypass this by
+        # calling React's internal onMouseDown handler directly via __reactProps$.
         log("Switching to Advanced mode…")
         mode_result = await tab.evaluate("""
             (() => {
-                const btns = [...document.querySelectorAll('button')];
-                const btn = btns.find(b => b.textContent.trim() === 'Advanced');
+                const btn = [...document.querySelectorAll('button')]
+                    .find(b => b.textContent.trim() === 'Advanced');
                 if (!btn) return 'not_found';
 
-                // Strategy 1: Call React's internal onClick/onMouseDown directly
                 const propsKey = Object.keys(btn).find(k => k.startsWith('__reactProps$'));
-                if (propsKey) {
-                    const props = btn[propsKey];
-                    const handlers = Object.keys(props || {}).filter(k =>
-                        k.startsWith('on') && typeof props[k] === 'function'
-                    );
-                    // Try onClick first, then onMouseDown, onPointerDown
-                    const tryOrder = ['onClick', 'onMouseDown', 'onPointerDown',
-                                      'onPointerUp', 'onMouseUp'];
-                    for (const name of tryOrder) {
-                        if (props[name]) {
-                            props[name]({
-                                bubbles: true,
-                                cancelable: true,
-                                preventDefault: () => {},
-                                stopPropagation: () => {},
-                                currentTarget: btn,
-                                target: btn,
-                                nativeEvent: { isTrusted: true },
-                            });
-                            return 'react_fiber:' + name + ' handlers=' + handlers.join(',');
-                        }
-                    }
-                    return 'no_handler found=' + handlers.join(',');
-                }
+                if (!propsKey) return 'no_reactProps';
 
-                // Strategy 2: Try broader React internal key prefix
-                const reactKey = Object.keys(btn).find(k => k.startsWith('__react'));
-                return 'no_reactProps key=' + (reactKey || 'none');
+                const props = btn[propsKey];
+                // onMouseDown is the handler Suno uses for tab switching
+                const tryOrder = ['onClick', 'onMouseDown', 'onPointerDown'];
+                for (const name of tryOrder) {
+                    if (typeof props[name] === 'function') {
+                        props[name]({
+                            bubbles: true, cancelable: true,
+                            preventDefault: () => {}, stopPropagation: () => {},
+                            currentTarget: btn, target: btn,
+                            nativeEvent: { isTrusted: true },
+                        });
+                        return 'ok:' + name;
+                    }
+                }
+                return 'no_handler';
             })()
         """)
         log(f"Advanced mode: {mode_result}")
         await asyncio.sleep(2)
 
-        # Verify toggle actually switched
-        mode_check = await tab.evaluate("""
-            (() => {
-                const btns = document.querySelectorAll('button');
-                for (const b of btns) {
-                    if (b.textContent.trim() === 'Advanced') {
-                        return b.classList.contains('active') ? 'active' : 'inactive';
-                    }
-                }
-                return 'not_found';
-            })()
-        """)
-        log(f"Advanced mode status: {mode_check}")
-
-        if mode_check != 'active':
-            # Fallback: try CDP dispatchMouseEvent with real coordinates
-            log("React fiber didn't work, trying CDP mouse at coordinates…")
-            try:
-                coords_json = await tab.evaluate("""
-                    (() => {
-                        const btns = [...document.querySelectorAll('button')];
-                        const btn = btns.find(b => b.textContent.trim() === 'Advanced');
-                        if (!btn) return 'null';
-                        const r = btn.getBoundingClientRect();
-                        return JSON.stringify({x: r.left + r.width/2, y: r.top + r.height/2});
-                    })()
-                """)
-                if coords_json and coords_json != 'null':
-                    coords = json.loads(coords_json)
-                    x, y = coords["x"], coords["y"]
-                    from nodriver import cdp as _cdp
-                    await tab.send(_cdp.input_.dispatch_mouse_event(
-                        type_="mousePressed", x=x, y=y,
-                        button=_cdp.input_.MouseButton.LEFT, click_count=1))
-                    await asyncio.sleep(0.05)
-                    await tab.send(_cdp.input_.dispatch_mouse_event(
-                        type_="mouseReleased", x=x, y=y,
-                        button=_cdp.input_.MouseButton.LEFT, click_count=1))
-                    log(f"CDP click at ({x:.0f}, {y:.0f})")
-                    await asyncio.sleep(2)
-            except Exception as e:
-                log(f"CDP click fallback failed: {e}")
-
-        # ── Fill lyrics (using data-testid) ──────────────────────────────────
+        # ── Fill lyrics ───────────────────────────────────────────────────────
+        # The lyrics textarea uses data-testid="lyrics-textarea".
+        # Native setter + input event works here (unlike style tags).
         log("Filling lyrics…")
         escaped_lyrics = json.dumps(song["lyrics"])
         lyrics_result = await tab.evaluate(f"""
             (() => {{
                 let ta = document.querySelector('textarea[data-testid="lyrics-textarea"]');
                 if (!ta) {{
-                    // Fallback: find by placeholder
                     const all = document.querySelectorAll('textarea');
                     for (const t of all) {{
                         if (t.placeholder && t.placeholder.includes('lyrics')) {{
@@ -299,22 +239,15 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
                 }}
                 if (!ta) return 'NO_LYRICS_TEXTAREA';
 
-                // Focus first to trigger React's internal state
                 ta.focus();
-
                 const setter = Object.getOwnPropertyDescriptor(
                     window.HTMLTextAreaElement.prototype, 'value'
                 ).set;
                 setter.call(ta, {escaped_lyrics});
-
-                // Reset React's internal value tracker
                 const tracker = ta._valueTracker;
                 if (tracker) tracker.setValue('');
-
-                // Dispatch events React listens to
                 ta.dispatchEvent(new Event('input', {{bubbles: true}}));
                 ta.dispatchEvent(new Event('change', {{bubbles: true}}));
-
                 return 'OK:' + ta.value.substring(0, 60);
             }})()
         """)
@@ -322,6 +255,7 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
         await asyncio.sleep(0.5)
 
         # ── Fill title ────────────────────────────────────────────────────────
+        # Find the visible input whose placeholder mentions "title".
         log("Filling title…")
         escaped_title = json.dumps(song["title"])
         title_result = await tab.evaluate(f"""
@@ -348,40 +282,121 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
         log(f"Title fill: {title_result}")
         await asyncio.sleep(0.5)
 
-        # ── Fill style/tags (it's a TEXTAREA with maxlength="1000") ────────
+        # ── Fill style/tags ───────────────────────────────────────────────────
+        # The Styles textarea is a React controlled component. Only the React
+        # fiber onChange approach works — we walk __reactFiber$ up the tree,
+        # call onChange at each level, and set ta.value via native setter before
+        # each call so event.target.value reads correctly.
+        #
+        # Why other approaches fail:
+        #   - Native setter + InputEvent: React ignores synthetic InputEvents
+        #   - execCommand('insertText'): wipes the value S3 just set
         log("Filling style tags…")
         escaped_tags = json.dumps(song["tags"])
         tags_result = await tab.evaluate(f"""
             (() => {{
-                // The styles textarea has maxlength="1000" — unique identifier
+                // Expand the Styles section if collapsed
+                for (const el of document.querySelectorAll('[role="button"][aria-expanded="false"]')) {{
+                    if (el.textContent.includes('Styles')) {{
+                        const pk = Object.keys(el).find(k => k.startsWith('__reactProps$'));
+                        if (pk && el[pk] && typeof el[pk].onClick === 'function') {{
+                            el[pk].onClick({{
+                                bubbles: true, cancelable: true,
+                                preventDefault: () => {{}}, stopPropagation: () => {{}},
+                                currentTarget: el, target: el,
+                                nativeEvent: {{ isTrusted: true }},
+                            }});
+                        }} else {{
+                            el.click();
+                        }}
+                        break;
+                    }}
+                }}
+
+                // Locate: textarea[maxlength="1000"] is the style field.
+                // Fallback: second textarea with the fog-dense placeholder class.
                 let ta = document.querySelector('textarea[maxlength="1000"]');
                 if (!ta) {{
-                    // Fallback: find visible textarea that's NOT lyrics
-                    const all = [...document.querySelectorAll('textarea')]
-                        .filter(t => t.offsetParent !== null
-                            && !t.hasAttribute('data-testid'));
-                    ta = all[0] || null;
+                    const fogDense = [...document.querySelectorAll('textarea')]
+                        .filter(t => t.className.includes('fog-dense'));
+                    ta = fogDense.length >= 2 ? fogDense[1] : null;
                 }}
                 if (!ta) return 'NO_STYLE_TEXTAREA';
 
-                ta.focus();
-                const setter = Object.getOwnPropertyDescriptor(
+                const targetValue = {escaped_tags};
+
+                // Walk React fiber tree and call onChange at each level
+                const nativeSetter = Object.getOwnPropertyDescriptor(
                     window.HTMLTextAreaElement.prototype, 'value'
                 ).set;
-                setter.call(ta, {escaped_tags});
-                const tracker = ta._valueTracker;
-                if (tracker) tracker.setValue('');
-                ta.dispatchEvent(new Event('input', {{bubbles: true}}));
-                ta.dispatchEvent(new Event('change', {{bubbles: true}}));
-                return 'OK:' + ta.value.substring(0, 60);
+                const fiberKey = Object.keys(ta).find(k =>
+                    k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$')
+                );
+                if (!fiberKey) return 'NO_FIBER_KEY';
+
+                let fiber = ta[fiberKey];
+                let walked = 0;
+                while (fiber && walked < 40) {{
+                    const props = fiber.memoizedProps || fiber.pendingProps;
+                    if (props && typeof props.onChange === 'function') {{
+                        nativeSetter.call(ta, targetValue);
+                        props.onChange({{
+                            target: ta, currentTarget: ta,
+                            bubbles: true, cancelable: true,
+                            preventDefault: () => {{}}, stopPropagation: () => {{}},
+                            nativeEvent: {{ isTrusted: true, data: targetValue, inputType: 'insertText' }},
+                        }});
+                    }}
+                    fiber = fiber.return;
+                    walked++;
+                }}
+
+                const val = ta.value;
+                return val ? 'OK:' + val.substring(0, 60) : 'EMPTY_AFTER_FIBER';
             }})()
         """)
         log(f"Tags fill: {tags_result}")
-        await asyncio.sleep(0.5)
 
-        # ── Set up CDP interception (Network-only, no Fetch) ─────────────────
-        # Fetch and Network domains use DIFFERENT request ID namespaces,
-        # so we use Network-only: requestWillBeSent → loadingFinished → getResponseBody
+        # Verify after one React render cycle; re-fill via fiber if wiped
+        await asyncio.sleep(0.8)
+        tags_verify = await tab.evaluate(f"""
+            (() => {{
+                const ta = document.querySelector('textarea[maxlength="1000"]')
+                    || [...document.querySelectorAll('textarea')]
+                        .filter(t => t.className.includes('fog-dense'))[1];
+                if (!ta) return 'TEXTAREA_GONE';
+                if (ta.value) return 'VERIFIED:' + ta.value.substring(0, 60);
+
+                // Value wiped by React — re-fill via fiber onChange
+                const targetValue = {escaped_tags};
+                const ns = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+                const fk = Object.keys(ta).find(k => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
+                if (!fk) return 'EMPTY_NO_FIBER';
+                let fiber = ta[fk], w = 0;
+                while (fiber && w < 40) {{
+                    const props = fiber.memoizedProps || fiber.pendingProps;
+                    if (props && typeof props.onChange === 'function') {{
+                        ns.call(ta, targetValue);
+                        props.onChange({{
+                            target: ta, currentTarget: ta, bubbles: true,
+                            preventDefault: () => {{}}, stopPropagation: () => {{}},
+                            nativeEvent: {{ isTrusted: true, data: targetValue, inputType: 'insertText' }},
+                        }});
+                    }}
+                    fiber = fiber.return; w++;
+                }}
+                return 'REFILLED:' + ta.value.substring(0, 60);
+            }})()
+        """)
+        log(f"Tags verify: {tags_verify}")
+        await asyncio.sleep(0.2)
+
+        # ── Set up CDP network interception ───────────────────────────────────
+        # We listen for the POST to api/generate/v2 and read its response body
+        # once the network request finishes loading. This gives us the clip IDs.
+        #
+        # Pipeline: RequestWillBeSent (spot POST) → ResponseReceived (log status)
+        #         → LoadingFinished (read body via getResponseBody)
         log("Setting up Network interception…")
         captured = {
             "response_body": None,
@@ -390,7 +405,6 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
         intercept_done = asyncio.Event()
 
         async def on_request_will_be_sent(event):
-            """Detect the POST to generate/v2 and store its Network request ID."""
             req = event.request
             url = req.url if req else ""
             if "api/generate/v2" in url and req.method == "POST":
@@ -398,7 +412,6 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
                 log(f"POST generate/v2 detected (rid={event.request_id})")
 
         async def on_response(event):
-            """Log generate/v2 responses for debugging."""
             url = event.response.url if event.response else ""
             if "api/generate/v2" in url:
                 code = event.response.status if event.response else 0
@@ -406,11 +419,10 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
                 log(f"generate/v2 response: HTTP {code} is_post={is_post}")
 
         async def on_loading_finished(event):
-            """Read response body when the POST response is fully loaded."""
             post_id = captured.get("post_request_id")
             if not post_id or event.request_id != post_id:
                 return
-            log(f"POST response body ready")
+            log("POST response body ready")
             for attempt in range(5):
                 try:
                     body_result = await tab.send(
@@ -425,14 +437,15 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
                     await asyncio.sleep(1)
             intercept_done.set()
 
-        # Network-only — consistent request IDs across all events
         await tab.send(cdp.network.enable())
         tab.add_handler(cdp.network.RequestWillBeSent, on_request_will_be_sent)
         tab.add_handler(cdp.network.ResponseReceived, on_response)
         tab.add_handler(cdp.network.LoadingFinished, on_loading_finished)
         log("Interception ready")
 
-        # ── Snapshot existing clip IDs (for DOM fallback later) ────────────
+        # ── Snapshot existing clip IDs for DOM fallback ────────────────────────
+        # If CDP interception fails, we compare before/after clip links to find
+        # newly generated clips.
         existing_ids_json = await tab.evaluate("""
             JSON.stringify(
                 [...document.querySelectorAll('a[href^="/song/"]')]
@@ -451,17 +464,14 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
         await asyncio.sleep(1)
         click_result = await tab.evaluate("""
             (() => {
-                // Primary: aria-label="Create song"
                 let btn = document.querySelector('button[aria-label="Create song"]');
                 if (!btn) {
-                    // Fallback: find by text content
                     const btns = [...document.querySelectorAll('button')]
                         .filter(b => b.offsetParent !== null);
                     for (const b of btns) {
                         const txt = b.textContent.trim();
                         if (txt === 'Create' || txt.includes('Create')) {
                             if (b.closest('[class*="playbar"]') || b.closest('nav')) continue;
-                            // Skip sidebar "Create New Workspace" etc
                             if (txt.includes('Workspace') || txt.includes('New')) continue;
                             btn = b;
                             break;
@@ -469,9 +479,7 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
                     }
                 }
                 if (!btn) return 'NOT_FOUND';
-
                 if (btn.disabled) {
-                    // Force remove disabled and click
                     btn.disabled = false;
                     btn.click();
                     return 'FORCE_CLICKED (was disabled)';
@@ -485,9 +493,10 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
         if "NOT_FOUND" in str(click_result):
             log("Create button NOT FOUND — check browser window")
 
-        # ── Wait for captcha + intercept ──────────────────────────────────────
+        # ── Wait for generation (+ captcha if needed) ─────────────────────────
+        # Poll every 10s for the CDP intercept. Every 30s check if a captcha
+        # iframe appeared so we can log it for the user.
         log("Waiting for generation… (solve captcha in browser if it appears)")
-        log("  If no captcha appears, generation will proceed automatically.")
         deadline = asyncio.get_event_loop().time() + 300  # 5 min timeout
 
         poll_count = 0
@@ -509,7 +518,6 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
                                 captcha: !!document.querySelector(
                                     'iframe[title*="hCaptcha"], iframe[src*="hcaptcha"]'
                                 ),
-                                modal: !!document.querySelector('[role="dialog"]'),
                                 url: window.location.href.substring(0, 60)
                             })
                         """)
@@ -527,13 +535,9 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
             except Exception:
                 log(f"Could not parse response: {captured['response_body'][:200]}")
 
-        # Fallback: if CDP didn't capture clips, scrape clip IDs from the DOM
-        if not clips and not intercept_done.is_set():
-            log("CDP capture timed out — scraping clip IDs from workspace DOM…")
-
+        # DOM fallback: if CDP didn't capture, scrape new clip IDs from page
         if not clips:
             log("Trying DOM fallback: extracting NEW clip IDs from page…")
-            # Wait for new clips to appear in workspace (poll DOM every 3s)
             for wait_round in range(10):
                 await asyncio.sleep(3)
                 dom_clips_json = await tab.evaluate("""
@@ -572,7 +576,7 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
 # ── Poll + Download ───────────────────────────────────────────────────────────
 
 def poll_and_download(clips: list[dict], song_title: str):
-    """Use the confirmed-working SunoClient for polling + download."""
+    """Poll clip statuses via SunoClient API, then download completed MP3s."""
     if not clips:
         print("  No clips to download.")
         return
@@ -589,19 +593,7 @@ def poll_and_download(clips: list[dict], song_title: str):
         timeout=300,
     )
 
-    # If clips are still "streaming", wait a bit more for them to finish encoding
-    still_streaming = [c for c in final if c.get("status") == "streaming"]
-    if still_streaming:
-        print(f"  {len(still_streaming)} clip(s) still streaming, waiting 15s for encoding…")
-        time.sleep(15)
-        # Re-poll to get "complete" status + final audio URLs
-        final = client.poll_until_done(
-            clip_ids,
-            on_status=lambda m: print(f"  [{m}]"),
-            timeout=120,
-        )
-
-    # Download
+    # Download completed clips, skip short ones (< 90s)
     out = Path(OUTPUT_DIR)
     out.mkdir(parents=True, exist_ok=True)
     slug = re.sub(r"[^\w\s-]", "", song_title.lower())
@@ -610,6 +602,7 @@ def poll_and_download(clips: list[dict], song_title: str):
     for idx, clip in enumerate(final, 1):
         status = clip.get("status", "")
         audio_url = clip.get("audio_url", "")
+        duration = clip.get("metadata", {}).get("duration", 0)
         if status == "error":
             err = clip.get("metadata", {}).get("error_message", "?")
             print(f"  ✗ Clip {idx} failed: {err}")
@@ -617,9 +610,11 @@ def poll_and_download(clips: list[dict], song_title: str):
         if not audio_url:
             print(f"  ✗ Clip {idx} has no audio URL")
             continue
+        if duration and duration < 90:
+            print(f"  ✗ Clip {idx} skipped — too short ({duration:.1f}s)")
+            continue
         dest = out / f"{slug}_{idx}.mp3"
-        print(f"  Downloading clip {idx} → {dest.name}")
-        # Retry download up to 3 times (CDN may not be ready yet)
+        print(f"  Downloading clip {idx} ({duration:.1f}s) → {dest.name}")
         for attempt in range(3):
             try:
                 client.download_mp3(audio_url, str(dest))
@@ -636,9 +631,7 @@ def poll_and_download(clips: list[dict], song_title: str):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 async def main():
-    # Only process the FIRST song for initial testing
-    # Change to SONGS[:3] once confirmed working
-    for song in SONGS[:1]:
+    for song in SONGS:
         try:
             clips = await generate_one_song_via_browser(song, COOKIE_STR)
             if clips:

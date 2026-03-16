@@ -14,7 +14,6 @@ DEFAULT_CONFIG = {
     "suno_password": "",
     "suno_totp_secret": "",     # Google Authenticator TOTP secret (optional)
     "suno_cookie": "",          # serialized cookie string from nodriver login
-    "suno_model": "chirp-auk",  # default: V4.5-All (free tier)
 }
 
 MODELS = {
