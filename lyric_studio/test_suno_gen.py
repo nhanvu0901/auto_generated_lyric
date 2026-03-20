@@ -34,9 +34,7 @@ if not COOKIE_STR:
 # ── Song files to generate ───────────────────────────────────────────────────
 
 SONG_FILES = [
-    r"D:\Code-project\Python\auto_generated_lyric\song\fold_a_map.txt",
-    r"D:\Code-project\Python\auto_generated_lyric\song\folded_in_threes.txt",
-    r"D:\Code-project\Python\auto_generated_lyric\song\frequency.txt",
+    "/Users/nhanvu/Documents/AI_project/auto_generated_lyric/song/you_dont_go.txt",
 ]
 
 
@@ -78,20 +76,6 @@ SUNO_CREATE = "https://suno.com/create"
 
 def log(msg: str):
     print(f"  [{msg}]")
-
-
-def _react_fiber_set(js_field_selector: str, value_expr: str, element_proto: str = "HTMLTextAreaElement") -> str:
-    """
-    Build JS that sets a React controlled input's value by walking the fiber
-    tree and calling onChange directly.  This is the only approach that reliably
-    updates React 18+ controlled components on Suno — native setter + InputEvent
-    and execCommand both fail or get wiped on the next render cycle.
-
-    Returns a JS IIFE string (for use with tab.evaluate).
-    """
-    # NOTE: this is a template used by the style tags fill; lyrics and title
-    # use the simpler native-setter approach because those happen to work.
-    pass  # Not used as a function — the pattern is inlined where needed.
 
 
 # ── Browser-based generation (one song at a time) ────────────────────────────
@@ -151,7 +135,7 @@ async def generate_one_song_via_browser(song: dict, cookie_str: str) -> list[dic
         # ── Navigate to /create ───────────────────────────────────────────────
         log("Opening suno.com/create…")
         tab = await browser.get(SUNO_CREATE)
-        await asyncio.sleep(6)
+        await asyncio.sleep(15)
 
         # Hide webdriver flag from bot detection
         try:

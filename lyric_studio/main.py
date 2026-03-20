@@ -7,11 +7,12 @@ import platform
 import re
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 import flet as ft
 
-from core.config import GENRES, MODELS, load_config, save_config
+from core.config import GENRES, MODELS, SUNO_MODELS, load_config, save_config
 from core.engine import (
     generate_lyrics,
     install_claude_code,
@@ -340,10 +341,27 @@ def main(page: ft.Page):
     _folder_songs: list[dict] = []
     _suno_checked: dict[int, bool] = {}
 
-    suno_tags_input = ft.TextField(  # kept for reference but hidden
-        visible=False,
-        text_size=13, expand=True,
+    # Resolve current model label from config
+    _current_suno_model_id = config.get("suno_model", "chirp-auk")
+    _suno_model_label = next(
+        (k for k, v in SUNO_MODELS.items() if v == _current_suno_model_id),
+        list(SUNO_MODELS.keys())[0],
     )
+    suno_model_dd = ft.Dropdown(
+        label="Model",
+        value=_suno_model_label,
+        options=[ft.dropdown.Option(k) for k in SUNO_MODELS],
+        width=200,
+        text_size=12, label_style=ft.TextStyle(size=11, color=DIM),
+        border_color=BORDER, focused_border_color=ACCENT,
+        bgcolor=SURFACE2, color=TEXT,
+        on_change=lambda e: _on_suno_model_change(e),
+    )
+
+    def _on_suno_model_change(e):
+        config["suno_model"] = SUNO_MODELS[suno_model_dd.value]
+        save_config(config)
+
     suno_send_btn = ft.ElevatedButton(
         "Generate Selected (0)",
         icon=ft.Icons.MUSIC_NOTE,
@@ -405,7 +423,7 @@ def main(page: ft.Page):
                 suno_song_list,
                 ft.Container(height=6),
                 ft.Row(
-                    [suno_send_btn],
+                    [suno_model_dd, suno_send_btn],
                     spacing=10,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
@@ -700,7 +718,8 @@ def main(page: ft.Page):
         selected = [_folder_songs[i] for i, v in _suno_checked.items() if v]
         if not selected:
             return
-        model_id = "chirp-v4"
+        # Use model from config, default to chirp-auk (V4.5 free tier)
+        model_id = config.get("suno_model", "chirp-auk")
         cookie   = config.get("suno_cookie", "")
         if not cookie:
             log_suno("No Suno account connected — go to Settings.", "#FF6B6B")
@@ -719,15 +738,11 @@ def main(page: ft.Page):
             import asyncio as _aio
             try:
                 from core.suno_client import SunoClient
-                from core.suno_auth import solve_captcha_via_browser
+                from core.suno_auth import generate_via_browser
 
                 client = SunoClient(cookie, on_log=lambda m: log_suno(m))
 
-                # Check if captcha is required
-                captcha_needed = client.check_captcha_required()
-
                 for song_idx, song in enumerate(selected):
-                    # Build rich style tags from all song metadata
                     tag_parts = [song.get("genre", "")]
                     if song.get("bpm"):
                         tag_parts.append(f"{song['bpm']} bpm")
@@ -735,17 +750,32 @@ def main(page: ft.Page):
                         tag_parts.append(song["theme"])
                     song_tags = ", ".join(p for p in tag_parts if p) or "pop"
 
-                    if captcha_needed:
-                        # Use browser-based flow: browser fills lyrics, user solves
-                        # captcha, generation happens in browser, we get clips back
-                        log_suno(f"Captcha required — opening browser for \"{song['title']}\"…")
-                        suno_status_text.value = f"Solve captcha for \"{song['title']}\"…"
+                    clips = None
+                    log_suno(f"Submitting \"{song['title']}\" | {song_tags}")
+                    suno_status_text.value = f"Generating \"{song['title']}\"…"
+                    page.update()
+
+                    # Try direct HTTP API first (fast, no browser)
+                    try:
+                        clips = client.generate(
+                            lyrics=song["lyrics"],
+                            tags=song_tags,
+                            title=song["title"],
+                            model=model_id,
+                        )
+                        log_suno(f"{len(clips)} clip(s) rendering…")
+                    except Exception as gen_err:
+                        # Direct API failed (403/422 = captcha required)
+                        # Fall back to browser-based generation
+                        log_suno(f"Direct API blocked: {gen_err}")
+                        log_suno("Opening browser for generation…")
+                        suno_status_text.value = f"Browser gen: \"{song['title']}\"…"
                         page.update()
 
                         loop = _aio.new_event_loop()
                         try:
-                            result = loop.run_until_complete(
-                                solve_captcha_via_browser(
+                            clips = loop.run_until_complete(
+                                generate_via_browser(
                                     cookie_str=cookie,
                                     lyrics=song["lyrics"],
                                     tags=song_tags,
@@ -754,27 +784,18 @@ def main(page: ft.Page):
                                     timeout=300.0,
                                 )
                             )
+                            if clips:
+                                log_suno(f"{len(clips)} clip(s) from browser")
+                        except Exception as browser_err:
+                            log_suno(f"Browser generation failed: {browser_err}", "#FF6B6B")
                         finally:
                             loop.close()
 
-                        clips = result.get("clips", [])
-                        if not clips:
-                            log_suno(f"No clips returned for \"{song['title']}\"", "#FF6B6B")
-                            continue
+                    if not clips:
+                        log_suno(f"No clips returned for \"{song['title']}\"", "#FF6B6B")
+                        continue
 
-                        log_suno(f"{len(clips)} clip(s) rendering…")
-
-                    else:
-                        # No captcha needed — use direct HTTP API
-                        log_suno(f"Submitting \"{song['title']}\" | {song_tags}")
-                        clips = client.generate(
-                            lyrics=song["lyrics"],
-                            tags=song_tags,
-                            title=song["title"],
-                            model=model_id,
-                        )
-                        log_suno(f"{len(clips)} clip(s) rendering…")
-
+                    # ── Poll + download ────────────────────────────────────
                     def on_poll(m):
                         suno_status_text.value = m
                         log_suno(m)
@@ -790,6 +811,12 @@ def main(page: ft.Page):
                             log_suno(f"Saved: {Path(p).name}", SUCCESS)
                     else:
                         log_suno(f"No audio for \"{song['title']}\"", "#FF6B6B")
+
+                    # ── Rate limit: 15s pause between songs ────────────────
+                    # Reduces captcha trigger rate for batch generation.
+                    if song_idx < len(selected) - 1:
+                        log_suno("Waiting 15s before next song…")
+                        time.sleep(15)
 
                 suno_status_text.value = "Done!"
                 log_suno("All done — check your output folder.", SUCCESS)
@@ -985,8 +1012,29 @@ def main(page: ft.Page):
             visible=bool(config.get("suno_cookie")),
         )
         s_suno_log = ft.Column([], spacing=3, scroll=ft.ScrollMode.AUTO, height=80)
+
+        def _copy_s_suno_log(e):
+            lines = []
+            for ctrl in s_suno_log.controls:
+                if isinstance(ctrl, ft.Text):
+                    lines.append(ctrl.value or "")
+            page.set_clipboard("\n".join(lines))
+            _s_suno_copy_btn.icon = ft.Icons.CHECK
+            _s_suno_copy_btn.tooltip = "Copied!"
+            page.update()
+
+        _s_suno_copy_btn = ft.IconButton(
+            ft.Icons.COPY, icon_color=DIM, icon_size=14,
+            tooltip="Copy log", on_click=_copy_s_suno_log,
+        )
         s_suno_log_card = ft.Container(
-            content=s_suno_log,
+            content=ft.Column([
+                ft.Row([
+                    ft.Container(expand=True),
+                    _s_suno_copy_btn,
+                ], spacing=0, height=20),
+                s_suno_log,
+            ], spacing=2),
             bgcolor="#0A0D14",
             border_radius=8,
             border=ft.border.all(1, BORDER),

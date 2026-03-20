@@ -24,16 +24,15 @@ MODELS = {
 GENRES = ["Pop", "Rock", "Country", "R&B", "Folk", "Indie", "Hip-Hop"]
 
 SUNO_MODELS = {
-    # Free tier
-    "V4.5-All (Free)":          "chirp-auk",           # 10 credits, 8 min max
+    # Free tier and above
+    "V4.5-All (Free)":          "chirp-auk",           # ~10 credits, 8 min max
     # Pro / Premier only
-    "V4.5 Turbo (Pro)":         "chirp-auk-turbo",     # 8 credits, ~4 min, faster
-    "V4.5+ (Pro)":              "chirp-bluejay",       # 10 credits, 8 min max
-    "V5 (Pro)":                 "chirp-crow",          # 12 credits, 8 min+
-    # Legacy (deprecated for free users)
-    "V4 (Legacy)":              "chirp-v4",            # 8 credits, 4 min max
-    "V3.5 (Legacy)":            "chirp-v3-5",          # 5 credits, 4 min max
-    "V3 (Legacy)":              "chirp-v3-0",          # 5 credits, 2 min max
+    "V4.5+ (Pro)":              "chirp-bluejay",       # ~10 credits, 8 min, add vocals/instrumental
+    "V5 (Pro)":                 "chirp-crow",          # ~12 credits, 8 min, stems, studio quality
+    # Legacy (still callable)
+    "V4 (Legacy)":              "chirp-v4",            # ~8 credits, ~4 min max
+    "V3.5 (Legacy)":            "chirp-v3-5",          # ~5 credits, 2 min max
+    "V3 (Legacy)":              "chirp-v3-0",          # ~5 credits, 2 min max
 }
 
 CONFIG_DIR = Path.home() / ".lyric_studio"

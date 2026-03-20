@@ -19,6 +19,9 @@ venv/
 # Claude
 lyric_studio/.claude/
 
+# Generated songs
+song/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -65,7 +65,15 @@
       "WebFetch(domain:docs.rixapi.com)",
       "WebFetch(domain:www.nikeshoebot.com)",
       "WebFetch(domain:docs.aimlapi.com)",
-      "WebFetch(domain:help.suno.com)"
+      "WebFetch(domain:help.suno.com)",
+      "Bash(.venv/bin/python3 -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('main.py: OK'\\)\" && .venv/bin/python3 -c \"import ast; ast.parse\\(open\\('core/suno_client.py'\\).read\\(\\)\\); print\\('suno_client.py: OK'\\)\")",
+      "Bash(.venv/bin/python3 -c \"from core.suno_client import SunoClient; print\\('import OK'\\); print\\('generate params:', [p for p in SunoClient.generate.__code__.co_varnames[:8]]\\)\")",
+      "Bash(/Users/nhanvu/Downloads/LyricStudio.app/Contents/MacOS/LyricStudio 2>&1 | head -30)",
+      "WebFetch(domain:chromedevtools.github.io)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:stackoverflow.com)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); d[''''suno_cookie'''']=''''''''; print\\(json.dumps\\(d,indent=2\\)\\)\")",
+      "Bash(mv /tmp/settings_tmp.json ~/.lyric_studio/settings.json)"
     ]
   }
 }

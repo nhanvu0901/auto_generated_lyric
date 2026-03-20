@@ -22,7 +22,8 @@ from typing import Callable, Optional
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 CLERK_BASE      = "https://auth.suno.com"
-CLERK_JS_VER    = "5.117.0"
+CLERK_JS_VER    = "4.74.0"                          # pinned: pre-fraud-detection
+CLERK_API_VER   = "2024-10-04"                      # match older Clerk era
 STUDIO_BASE     = "https://studio-api.prod.suno.com"
 DEFAULT_MODEL   = "chirp-auk"
 
@@ -32,30 +33,22 @@ _UA = (
     "Chrome/130.0.0.0 Safari/537.36"
 )
 
+# Consistent macOS Chrome fingerprint — Android fields removed to avoid
+# mismatch with macOS User-Agent (fingerprint inconsistency is a bot signal)
 _BASE_HEADERS = {
-    "Affiliate-Id": "undefined",
-    "x-suno-client": "Android prerelease-4nt180t 1.0.42",
-    "X-Requested-With": "com.suno.android",
-    "sec-ch-ua": '"Chromium";v="130", "Android WebView";v="130", "Not?A_Brand";v="99"',
-    "sec-ch-ua-mobile": "?1",
-    "sec-ch-ua-platform": '"Android"',
-    "User-Agent": _UA,
+    "User-Agent":         _UA,
+    "sec-ch-ua":          '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
+    "sec-ch-ua-mobile":   "?0",
+    "sec-ch-ua-platform": '"macOS"',
+    "sec-fetch-dest":     "empty",
+    "sec-fetch-mode":     "cors",
+    "sec-fetch-site":     "same-site",
+    "Accept":             "application/json",
 }
 
 # Generation status values returned by Suno
 # "streaming" = audio still encoding, "complete" = ready to download
 TERMINAL_STATUSES = {"complete", "error"}
-
-# Available Suno model versions (mv parameter)
-SUNO_MODELS = {
-    "V4.5-All (Free)":      "chirp-auk",           # 10 credits, 8 min max
-    "V4.5 Turbo (Pro)":     "chirp-auk-turbo",     # 8 credits, ~4 min, faster
-    "V4.5+ (Pro)":          "chirp-bluejay",       # 10 credits, 8 min max
-    "V5 (Pro)":             "chirp-crow",          # 12 credits, 8 min+
-    "V4 (Legacy)":          "chirp-v4",            # 8 credits, 4 min max
-    "V3.5 (Legacy)":        "chirp-v3-5",          # 5 credits, 4 min max
-    "V3 (Legacy)":          "chirp-v3-0",          # 5 credits, 2 min max
-}
 
 
 # ── Cookie helpers ─────────────────────────────────────────────────────────────
@@ -138,7 +131,7 @@ class SunoClient:
     def _fetch_session_id(self) -> str:
         url = (
             f"{CLERK_BASE}/v1/client"
-            f"?__clerk_api_version=2025-11-10"
+            f"?__clerk_api_version={CLERK_API_VER}"
             f"&_clerk_js_version={CLERK_JS_VER}"
         )
         last_data = {}
@@ -167,7 +160,7 @@ class SunoClient:
     def _do_refresh_token(self) -> None:
         url = (
             f"{CLERK_BASE}/v1/client/sessions/{self._session_id}/tokens"
-            f"?__clerk_api_version=2025-11-10"
+            f"?__clerk_api_version={CLERK_API_VER}"
             f"&_clerk_js_version={CLERK_JS_VER}"
         )
         r = requests.post(url, headers=self._clerk_headers(), timeout=15)
@@ -204,23 +197,6 @@ class SunoClient:
             "monthly_usage": d.get("monthly_usage"),
         }
 
-    def check_captcha_required(self) -> bool:
-        """Check if Suno requires hCaptcha for generation."""
-        self._do_refresh_token()
-        try:
-            r = requests.post(
-                f"{STUDIO_BASE}/api/c/check",
-                json={"ctype": "generation"},
-                headers=self._api_headers(),
-                timeout=15,
-            )
-            data = r.json()
-            self._log(f"Captcha check: {data}")
-            return data.get("required", False)
-        except Exception as e:
-            self._log(f"Captcha check failed: {e}")
-            return False
-
     def generate(
         self,
         lyrics: str,
@@ -228,19 +204,14 @@ class SunoClient:
         title: str,
         model: str = DEFAULT_MODEL,
         make_instrumental: bool = False,
-        negative_tags: str = "",
-        captcha_token: str = "",
     ) -> list[dict]:
         """
         Submit a custom-lyrics generation request.
 
         Returns a list of clip dicts (Suno always returns 2 clips).
         Each dict has at minimum: id, status, title.
-
-        If captcha_token is provided, it will be included in the payload.
         """
         self._do_refresh_token()
-        self._log(f"JWT refreshed: {len(self._token or '')} chars")
         payload = {
             "prompt": lyrics,
             "tags": tags,
@@ -248,11 +219,6 @@ class SunoClient:
             "mv": model,
             "make_instrumental": make_instrumental,
         }
-        if negative_tags:
-            payload["negative_tags"] = negative_tags
-        if captcha_token:
-            payload["token"] = captcha_token
-            self._log("Including captcha token in request")
         headers = self._api_headers()
         self._log(f"Model: {model}, Title: {title}, Tags: {tags}")
         r = requests.post(

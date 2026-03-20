@@ -1,18 +1,15 @@
-"""Suno authentication via nodriver stealth browser.
+"""Suno browser automation — login + music generation.
 
-Opens a visible browser to suno.com and lets the user log in manually
-(any method: Google, Discord, email, etc.). Polls browser-level cookies
-and tabs to detect successful login, then extracts cookies and closes.
+login_and_get_cookies():
+  Opens browser to suno.com, user logs in manually (any method),
+  extracts cookies via independent WebSocket (bypasses nodriver's
+  broken Cookie.from_json parser).
 
-Also provides solve_captcha_via_browser() for the hybrid captcha flow:
-opens browser to /create, fills lyrics, clicks Create, user solves
-hCaptcha manually, then we intercept the generate/v2 request via CDP
-to extract the captcha token + JWT.
-
-Key design: we never call page.send() during the wait loop — the page
-object can go stale during cross-origin OAuth redirects (e.g. Google).
-Instead we use browser.cookies.get_all() and browser.tabs which survive
-any navigation.
+generate_via_browser():
+  Opens browser with saved cookies, switches to Advanced mode,
+  fills lyrics/title/style tags using React fiber internals,
+  clicks Create, intercepts generate/v2 response via CDP Network
+  to get clip IDs. Falls back to DOM scraping if CDP capture fails.
 """
 
 import asyncio
@@ -22,11 +19,6 @@ from urllib.parse import urlparse
 
 SUNO_SIGN_IN = "https://suno.com/sign-in"
 SUNO_CREATE  = "https://suno.com/create"
-
-# Only keep cookies from these domains — everything else (Google, Discord,
-# tracking pixels, etc.) is noise and makes the Cookie header too large
-# (431 Request Header Fields Too Large from Clerk).
-SUNO_COOKIE_DOMAINS = {"suno.com", ".suno.com", "clerk.suno.com"}
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -52,7 +44,7 @@ def _is_suno_domain(domain: str) -> bool:
 
 
 def _get_tab_host(tab) -> str:
-    """Extract the hostname from a tab's URL (e.g. 'suno.com')."""
+    """Extract the hostname from a tab's URL."""
     try:
         url = tab.target.url or ""
         return urlparse(url).hostname or ""
@@ -61,7 +53,7 @@ def _get_tab_host(tab) -> str:
 
 
 def _get_tab_path(tab) -> str:
-    """Extract the path from a tab's URL (e.g. '/sign-in')."""
+    """Extract the path from a tab's URL."""
     try:
         url = tab.target.url or ""
         return urlparse(url).path or ""
@@ -92,6 +84,40 @@ def _describe_location(browser) -> str:
                 return "Please log in to Suno in the browser window…"
             return "Checking for session…"
     return "Waiting for login to complete…"
+
+
+async def _extract_cookies_raw(browser, status_fn) -> list:
+    """Extract all browser cookies via an independent WebSocket.
+
+    nodriver's Cookie.from_json() crashes on Chrome's removed 'sameParty'
+    field (KeyError), and its _listener loop owns the WebSocket recv(),
+    blocking direct use. We open a SECOND WebSocket to Chrome's browser
+    debug endpoint, send Storage.getCookies, parse the raw JSON ourselves.
+    """
+    import websockets
+
+    try:
+        ws_url = browser.connection.websocket_url
+        async with websockets.connect(ws_url, max_size=2**24) as ws:
+            await ws.send(json.dumps({
+                "id": 1, "method": "Storage.getCookies", "params": {},
+            }))
+            raw = await asyncio.wait_for(ws.recv(), timeout=10.0)
+            msg = json.loads(raw)
+            cookies_data = msg.get("result", {}).get("cookies", [])
+
+            class _Cookie:
+                def __init__(self, d):
+                    self.name = d.get("name", "")
+                    self.value = d.get("value", "")
+                    self.domain = d.get("domain", "")
+
+            cookies = [_Cookie(c) for c in cookies_data]
+            status_fn(f"Got {len(cookies)} cookies")
+            return cookies
+    except Exception as exc:
+        status_fn(f"Cookie extraction failed: {type(exc).__name__}: {exc}")
+        return []
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
@@ -138,45 +164,36 @@ async def login_and_get_cookies(
 
         status("Please log in to Suno in the browser window (any method)…")
 
-        # ── Poll browser-level cookies + tabs ────────────────────────────────
-        # We do NOT use `page.send()` here because the page object can go
-        # stale when the browser navigates cross-origin (Google OAuth, etc.).
-        # browser.cookies.get_all() finds any alive tab internally.
+        # ── Detect login by polling tab URLs ──────────────────────────────
+        # We do NOT use CDP cookie queries here — after OAuth redirects,
+        # all tab CDP connections are dead.
         deadline = asyncio.get_event_loop().time() + timeout
         logged_in = False
         last_status = ""
+        suno_home_checks = 0
 
         while asyncio.get_event_loop().time() < deadline:
             await asyncio.sleep(2)
 
-            # Context-aware status
             new_status = _describe_location(browser)
             if new_status != last_status:
                 status(new_status)
                 last_status = new_status
 
-            # Check 1: is any tab back on suno.com (not sign-in)?
             suno_tab = _find_suno_tab(browser)
             if not suno_tab:
+                suno_home_checks = 0
                 continue
             path = _get_tab_path(suno_tab)
             if "/sign-in" in path or "/sign-up" in path:
+                suno_home_checks = 0
                 continue
 
-            # Check 2: does __client cookie exist? (browser-level)
-            try:
-                all_cookies = await browser.cookies.get_all()
-                has_client = any(
-                    c.name == "__client" and c.value
-                    for c in all_cookies
-                )
-                if has_client:
-                    logged_in = True
-                    break
-            except Exception:
-                # browser.cookies.get_all() needs at least one alive tab;
-                # if all tabs are mid-navigation, just retry next loop
-                pass
+            # User on suno.com (not sign-in) for 2 consecutive checks = logged in
+            suno_home_checks += 1
+            if suno_home_checks >= 2:
+                logged_in = True
+                break
 
         if not logged_in:
             raise RuntimeError(
@@ -184,29 +201,14 @@ async def login_and_get_cookies(
                 f"{int(timeout)} seconds. Please try again."
             )
 
-        # ── Navigate to /create to fully initialize Clerk session ────────────
-        status("Login detected! Initializing session…")
-        suno_tab = _find_suno_tab(browser)
-        if suno_tab:
-            await suno_tab.get(SUNO_CREATE)
-        else:
-            await browser.get(SUNO_CREATE)
-        await asyncio.sleep(4)
+        # ── Extract cookies via independent WebSocket ─────────────────────
+        status("Login detected! Extracting session cookies…")
+        all_cookies = await _extract_cookies_raw(browser, status)
 
-        # Inject stealth on the suno tab
-        suno_tab = _find_suno_tab(browser)
-        if suno_tab:
-            await _inject_stealth(suno_tab)
-
-        # ── Extract final cookies (Suno domains only) ────────────────────────
-        status("Extracting session cookies…")
-        all_cookies = await browser.cookies.get_all()
-
-        # Filter to Suno-related domains only. Google OAuth, Discord, etc.
-        # cookies bloat the header and cause 431 from Clerk.
+        # Filter to Suno-related domains only
         suno_cookies = [
             c for c in all_cookies
-            if c.name and c.value and _is_suno_domain(getattr(c, "domain", ""))
+            if c.name and c.value and _is_suno_domain(c.domain)
         ]
 
         cookie_str = "; ".join(
@@ -229,30 +231,26 @@ async def login_and_get_cookies(
             pass
 
 
-# ── Captcha solving via browser ───────────────────────────────────────────────
+# ── Browser-based music generation ────────────────────────────────────────────
 
-async def solve_captcha_via_browser(
+async def generate_via_browser(
     cookie_str: str,
     lyrics: str,
     tags: str,
     title: str,
     on_status: Optional[Callable[[str], None]] = None,
     timeout: float = 300.0,
-) -> dict:
+) -> list[dict]:
     """
-    Open a stealth browser to suno.com/create with saved cookies,
-    fill in the song details, click Create, and let the user solve
-    the hCaptcha manually. Intercept the generate/v2 request via CDP
-    to extract the captcha token and JWT.
+    Open browser → inject cookies → fill form → click Create →
+    intercept generate/v2 via CDP Network → return clip dicts.
 
-    Returns dict with keys: token, authorization, clips.
-    - token: hCaptcha token from the intercepted request body
-    - authorization: Bearer JWT from the intercepted request headers
-    - clips: list of clip dicts from the Suno response (the generation
-             already happened in the browser, so we just return the result)
+    This is the primary generation method for free accounts (captcha
+    is handled automatically by the browser).
     """
     try:
         import nodriver as uc
+        from nodriver import cdp
     except ImportError:
         raise RuntimeError("nodriver is not installed. Run: pip install nodriver")
 
@@ -260,7 +258,7 @@ async def solve_captcha_via_browser(
         if on_status:
             on_status(msg)
 
-    status("Launching browser for captcha…")
+    status("Launching browser…")
     browser = await uc.start(
         headless=False,
         browser_args=[
@@ -273,12 +271,11 @@ async def solve_captcha_via_browser(
     )
 
     try:
-        # Navigate to about:blank first, set cookies, then go to /create
-        status("Setting session cookies…")
+        # ── Inject cookies ────────────────────────────────────────────────
+        status("Injecting cookies…")
         tab = await browser.get("about:blank")
         await asyncio.sleep(1)
 
-        # Parse and set cookies via CDP — set on multiple domains
         cookie_count = 0
         for part in cookie_str.split(";"):
             part = part.strip()
@@ -288,411 +285,326 @@ async def solve_captcha_via_browser(
             name = name.strip()
             if not name or not value:
                 continue
-            # Set on both .suno.com and suno.com to cover all cases
-            for domain in [".suno.com"]:
-                try:
-                    result = await tab.send(uc.cdp.network.set_cookie(
-                        name=name,
-                        value=value,
-                        domain=domain,
-                        path="/",
-                        secure=True,
-                    ))
-                    cookie_count += 1
-                except Exception as exc:
-                    status(f"Cookie set failed: {name} -> {exc}")
+            try:
+                await tab.send(cdp.network.set_cookie(
+                    name=name, value=value,
+                    domain=".suno.com", path="/", secure=True,
+                ))
+                cookie_count += 1
+            except Exception:
+                pass
+        status(f"Injected {cookie_count} cookies")
 
-        status(f"Set {cookie_count} cookies")
-
-        # Navigate to /create
-        status("Opening Suno create page…")
+        # ── Navigate to /create ───────────────────────────────────────────
+        status("Opening suno.com/create…")
         tab = await browser.get(SUNO_CREATE)
-        await asyncio.sleep(5)
+        await asyncio.sleep(15)
+
         await _inject_stealth(tab)
 
-        # Check current URL — did we get redirected to sign-in?
         current_url = await tab.evaluate("window.location.href")
-        status(f"Current URL: {current_url}")
-        if current_url and "/sign-in" in str(current_url):
-            raise RuntimeError(
-                "Redirected to sign-in page — cookies may have expired. "
-                "Please reconnect your account in Settings."
-            )
+        if "/sign-in" in str(current_url):
+            raise RuntimeError("Redirected to sign-in — cookies expired!")
 
-        # Check if user appears logged in
-        login_info = await tab.evaluate("""
-            JSON.stringify({
-                hasAvatar: !!document.querySelector('[class*="avatar"], [class*="Avatar"]'),
-                bodySnippet: document.body ? document.body.innerText.substring(0, 200) : ''
-            })
-        """)
-        status(f"Login check: {login_info}")
+        # ── Wait for create form to render ────────────────────────────────
+        status("Waiting for create form…")
+        for _ in range(20):
+            ready = await tab.evaluate("""
+                !!document.querySelector('textarea[data-testid="lyrics-textarea"]')
+                || document.querySelectorAll('textarea').length > 0
+            """)
+            if ready:
+                break
+            await asyncio.sleep(1.5)
 
-        # Dump all visible form elements to understand the page structure
-        page_dump = await tab.evaluate("""
-            JSON.stringify({
-                textareas: [...document.querySelectorAll('textarea')].map(t => ({
-                    cls: t.className,
-                    ph: t.placeholder || '',
-                    vis: t.offsetParent !== null
-                })),
-                inputs: [...document.querySelectorAll('input')].filter(i => i.offsetParent !== null).map(i => ({
-                    type: i.type,
-                    ph: i.placeholder || ''
-                })),
-                buttons: [...document.querySelectorAll('button')].filter(b => b.offsetParent !== null).map(b => ({
-                    text: b.textContent.trim().substring(0, 40),
-                    aria: b.getAttribute('aria-label') || '',
-                    disabled: b.disabled
-                }))
-            })
-        """)
-        try:
-            page_info = json.loads(page_dump)
-        except Exception:
-            page_info = {"textareas": [], "inputs": [], "buttons": []}
-            status(f"Raw page dump: {str(page_dump)[:300]}")
-
-        status(f"Page: {len(page_info.get('textareas', []))} textareas, "
-               f"{len(page_info.get('inputs', []))} inputs, "
-               f"{len(page_info.get('buttons', []))} buttons")
-
-        for ta in page_info.get("textareas", []):
-            status(f"  textarea: cls='{ta.get('cls','')}' ph='{ta.get('ph','')}' vis={ta.get('vis')}")
-        for inp in page_info.get("inputs", []):
-            status(f"  input: type='{inp.get('type','')}' ph='{inp.get('ph','')}'")
-        for btn in page_info.get("buttons", [])[:15]:
-            status(f"  btn: text='{btn.get('text','')}' aria='{btn.get('aria','')}' disabled={btn.get('disabled')}")
-
-        # Switch to custom mode if needed
-        status("Switching to Custom mode…")
-        custom_clicked = await tab.evaluate("""
+        # ── Switch to Advanced mode ───────────────────────────────────────
+        # Suno filters isTrusted — call React's onMouseDown via __reactProps$
+        status("Switching to Advanced mode…")
+        mode_result = await tab.evaluate("""
             (() => {
-                const btns = document.querySelectorAll('button');
-                for (const b of btns) {
-                    const txt = b.textContent.trim().toLowerCase();
-                    if (txt === 'custom') {
-                        b.click();
-                        return 'clicked';
+                const btn = [...document.querySelectorAll('button')]
+                    .find(b => b.textContent.trim() === 'Advanced');
+                if (!btn) return 'not_found';
+
+                const propsKey = Object.keys(btn).find(k => k.startsWith('__reactProps$'));
+                if (!propsKey) return 'no_reactProps';
+
+                const props = btn[propsKey];
+                const tryOrder = ['onClick', 'onMouseDown', 'onPointerDown'];
+                for (const name of tryOrder) {
+                    if (typeof props[name] === 'function') {
+                        props[name]({
+                            bubbles: true, cancelable: true,
+                            preventDefault: () => {}, stopPropagation: () => {},
+                            currentTarget: btn, target: btn,
+                            nativeEvent: { isTrusted: true },
+                        });
+                        return 'ok:' + name;
                     }
                 }
-                return 'not_found';
+                return 'no_handler';
             })()
         """)
-        status(f"Custom mode toggle: {custom_clicked}")
+        status(f"Advanced mode: {mode_result}")
         await asyncio.sleep(2)
 
-        # Re-check page elements after switching to Custom
-        if custom_clicked == "clicked":
-            dump2 = await tab.evaluate("""
-                JSON.stringify({
-                    textareas: [...document.querySelectorAll('textarea')].map(t => ({
-                        cls: t.className, ph: t.placeholder || '', vis: t.offsetParent !== null
-                    })),
-                    inputs: [...document.querySelectorAll('input')].filter(i =>
-                        i.offsetParent !== null
-                    ).map(i => ({ type: i.type, ph: i.placeholder || '' })),
-                    buttons: [...document.querySelectorAll('button')].filter(b =>
-                        b.offsetParent !== null
-                    ).map(b => ({
-                        text: b.textContent.trim().substring(0, 40),
-                        aria: b.getAttribute('aria-label') || '',
-                        disabled: b.disabled
-                    }))
-                })
-            """)
-            try:
-                pi2 = json.loads(dump2)
-            except Exception:
-                pi2 = {"textareas": [], "inputs": [], "buttons": []}
-                status(f"Raw dump2: {str(dump2)[:300]}")
-            status(f"After Custom: {len(pi2.get('textareas',[]))} textareas, "
-                   f"{len(pi2.get('inputs',[]))} inputs, "
-                   f"{len(pi2.get('buttons',[]))} buttons")
-            for ta in pi2.get("textareas", []):
-                status(f"  textarea: cls='{ta.get('cls','')}' ph='{ta.get('ph','')}'")
-            for inp in pi2.get("inputs", []):
-                status(f"  input: type='{inp.get('type','')}' ph='{inp.get('ph','')}'")
-            for btn in pi2.get("buttons", [])[:15]:
-                status(f"  btn: text='{btn.get('text','')}' aria='{btn.get('aria','')}' disabled={btn.get('disabled')}")
-
-        # Fill in lyrics — try multiple selectors
-        status("Filling in lyrics…")
+        # ── Fill lyrics ───────────────────────────────────────────────────
+        status("Filling lyrics…")
         escaped_lyrics = json.dumps(lyrics)
-        lyrics_filled = await tab.evaluate(f"""
+        await tab.evaluate(f"""
             (() => {{
-                // Try .custom-textarea first, then any visible textarea
-                let ta = document.querySelector('.custom-textarea');
+                let ta = document.querySelector('textarea[data-testid="lyrics-textarea"]');
                 if (!ta) {{
                     const all = document.querySelectorAll('textarea');
                     for (const t of all) {{
-                        if (t.offsetParent !== null) {{ ta = t; break; }}
+                        if (t.placeholder && t.placeholder.includes('lyrics')) {{
+                            ta = t; break;
+                        }}
                     }}
                 }}
-                if (!ta) return 'no_textarea';
+                if (!ta) return 'NO_LYRICS_TEXTAREA';
 
+                ta.focus();
+                const setter = Object.getOwnPropertyDescriptor(
+                    window.HTMLTextAreaElement.prototype, 'value'
+                ).set;
+                setter.call(ta, {escaped_lyrics});
+                const tracker = ta._valueTracker;
+                if (tracker) tracker.setValue('');
+                ta.dispatchEvent(new Event('input', {{bubbles: true}}));
+                ta.dispatchEvent(new Event('change', {{bubbles: true}}));
+                return 'OK';
+            }})()
+        """)
+        await asyncio.sleep(0.5)
+
+        # ── Fill title ────────────────────────────────────────────────────
+        escaped_title = json.dumps(title)
+        await tab.evaluate(f"""
+            (() => {{
+                const inputs = [...document.querySelectorAll('input')]
+                    .filter(i => i.offsetParent !== null);
+                for (const inp of inputs) {{
+                    const ph = (inp.placeholder || '').toLowerCase();
+                    if (ph.includes('title') || ph.includes('name') || ph.includes('song')) {{
+                        const setter = Object.getOwnPropertyDescriptor(
+                            window.HTMLInputElement.prototype, 'value'
+                        ).set;
+                        setter.call(inp, {escaped_title});
+                        const tracker = inp._valueTracker;
+                        if (tracker) tracker.setValue('');
+                        inp.dispatchEvent(new Event('input', {{bubbles: true}}));
+                        inp.dispatchEvent(new Event('change', {{bubbles: true}}));
+                        return 'OK';
+                    }}
+                }}
+                return 'NO_TITLE_INPUT';
+            }})()
+        """)
+        await asyncio.sleep(0.5)
+
+        # ── Fill style/tags (React fiber onChange walk) ────────────────────
+        status("Filling style tags…")
+        escaped_tags = json.dumps(tags)
+        await tab.evaluate(f"""
+            (() => {{
+                // Expand Styles section if collapsed
+                for (const el of document.querySelectorAll('[role="button"][aria-expanded="false"]')) {{
+                    if (el.textContent.includes('Styles')) {{
+                        const pk = Object.keys(el).find(k => k.startsWith('__reactProps$'));
+                        if (pk && el[pk] && typeof el[pk].onClick === 'function') {{
+                            el[pk].onClick({{
+                                bubbles: true, cancelable: true,
+                                preventDefault: () => {{}}, stopPropagation: () => {{}},
+                                currentTarget: el, target: el,
+                                nativeEvent: {{ isTrusted: true }},
+                            }});
+                        }}
+                        break;
+                    }}
+                }}
+
+                let ta = document.querySelector('textarea[maxlength="1000"]');
+                if (!ta) return 'NO_STYLE_TEXTAREA';
+
+                const targetValue = {escaped_tags};
                 const nativeSetter = Object.getOwnPropertyDescriptor(
                     window.HTMLTextAreaElement.prototype, 'value'
                 ).set;
-                nativeSetter.call(ta, {escaped_lyrics});
-                ta.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                ta.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                const fiberKey = Object.keys(ta).find(k =>
+                    k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$')
+                );
+                if (!fiberKey) return 'NO_FIBER_KEY';
 
-                // Also try React fiber dispatch
-                const tracker = ta._valueTracker;
-                if (tracker) {{ tracker.setValue(''); }}
-                ta.dispatchEvent(new Event('input', {{ bubbles: true }}));
-
-                return 'filled:' + ta.value.substring(0, 50);
-            }})()
-        """)
-        status(f"Lyrics: {lyrics_filled}")
-        await asyncio.sleep(0.5)
-
-        # Fill in title — try placeholder matching + positional fallback
-        escaped_title = json.dumps(title)
-        title_filled = await tab.evaluate(f"""
-            (() => {{
-                const inputs = document.querySelectorAll('input');
-                const visible = [...inputs].filter(i => i.offsetParent !== null);
-
-                // First try placeholder matching
-                for (const inp of visible) {{
-                    const ph = (inp.placeholder || '').toLowerCase();
-                    if (ph.includes('title') || ph.includes('name') || ph.includes('song')) {{
-                        const nativeSetter = Object.getOwnPropertyDescriptor(
-                            window.HTMLInputElement.prototype, 'value'
-                        ).set;
-                        nativeSetter.call(inp, {escaped_title});
-                        const tracker = inp._valueTracker;
-                        if (tracker) {{ tracker.setValue(''); }}
-                        inp.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                        inp.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                        return 'filled_by_placeholder:' + inp.placeholder;
+                let fiber = ta[fiberKey];
+                let walked = 0;
+                while (fiber && walked < 40) {{
+                    const props = fiber.memoizedProps || fiber.pendingProps;
+                    if (props && typeof props.onChange === 'function') {{
+                        nativeSetter.call(ta, targetValue);
+                        props.onChange({{
+                            target: ta, currentTarget: ta,
+                            bubbles: true, cancelable: true,
+                            preventDefault: () => {{}}, stopPropagation: () => {{}},
+                            nativeEvent: {{ isTrusted: true, data: targetValue, inputType: 'insertText' }},
+                        }});
                     }}
+                    fiber = fiber.return;
+                    walked++;
                 }}
-                return 'no_title_input';
+                return ta.value ? 'OK' : 'EMPTY_AFTER_FIBER';
             }})()
         """)
-        status(f"Title: {title_filled}")
-        await asyncio.sleep(0.5)
 
-        # Fill in tags/style
-        escaped_tags = json.dumps(tags)
-        tags_filled = await tab.evaluate(f"""
+        # Verify + re-fill if React wiped the value
+        await asyncio.sleep(0.8)
+        await tab.evaluate(f"""
             (() => {{
-                const inputs = document.querySelectorAll('input');
-                const visible = [...inputs].filter(i => i.offsetParent !== null);
-
-                for (const inp of visible) {{
-                    const ph = (inp.placeholder || '').toLowerCase();
-                    if (ph.includes('style') || ph.includes('genre') || ph.includes('tag') || ph.includes('describe')) {{
-                        const nativeSetter = Object.getOwnPropertyDescriptor(
-                            window.HTMLInputElement.prototype, 'value'
-                        ).set;
-                        nativeSetter.call(inp, {escaped_tags});
-                        const tracker = inp._valueTracker;
-                        if (tracker) {{ tracker.setValue(''); }}
-                        inp.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                        inp.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                        return 'filled_by_placeholder:' + inp.placeholder;
+                const ta = document.querySelector('textarea[maxlength="1000"]');
+                if (!ta || ta.value) return;
+                const targetValue = {escaped_tags};
+                const ns = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+                const fk = Object.keys(ta).find(k => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
+                if (!fk) return;
+                let fiber = ta[fk], w = 0;
+                while (fiber && w < 40) {{
+                    const props = fiber.memoizedProps || fiber.pendingProps;
+                    if (props && typeof props.onChange === 'function') {{
+                        ns.call(ta, targetValue);
+                        props.onChange({{
+                            target: ta, currentTarget: ta, bubbles: true,
+                            preventDefault: () => {{}}, stopPropagation: () => {{}},
+                            nativeEvent: {{ isTrusted: true, data: targetValue, inputType: 'insertText' }},
+                        }});
                     }}
+                    fiber = fiber.return; w++;
                 }}
-                return 'no_style_input';
             }})()
         """)
-        status(f"Tags: {tags_filled}")
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.2)
 
-        # Set up network interception BEFORE clicking Create
-        status("Setting up request interception…")
-        captured = {"token": None, "authorization": None, "response_body": None}
+        # ── Set up CDP Network interception ───────────────────────────────
+        status("Setting up interception…")
+        captured = {"response_body": None, "post_request_id": None}
         intercept_done = asyncio.Event()
 
-        async def _handle_request_paused(event):
-            """Handle intercepted requests via CDP Fetch domain."""
-            request = event.request
-            url = request.url if request else ""
-            request_id = event.request_id
+        async def on_request_will_be_sent(event):
+            req = event.request
+            url = req.url if req else ""
+            if "api/generate/v2" in url and req.method == "POST":
+                captured["post_request_id"] = event.request_id
 
-            if "api/generate/v2" in url and request.method == "POST":
-                status(f"Intercepted generate/v2 request!")
-                # Capture the authorization header (Headers is a dict subclass)
-                hdrs = request.headers or {}
-                for k, v in hdrs.items():
-                    if k.lower() == "authorization":
-                        captured["authorization"] = v
-                        break
-
-                # Capture the request body to extract captcha token
-                body = getattr(request, "post_data", None)
-                if body:
-                    try:
-                        data = json.loads(body)
-                        captured["token"] = data.get("token", "")
-                        status(f"Captured token: {len(captured['token'] or '')} chars")
-                    except Exception as exc:
-                        status(f"Failed to parse request body: {exc}")
-                else:
-                    status("No post_data on intercepted request")
-
-                # Let the request continue
-                try:
-                    await tab.send(uc.cdp.fetch.continue_request(request_id=request_id))
-                except Exception:
-                    pass
+        async def on_loading_finished(event):
+            post_id = captured.get("post_request_id")
+            if not post_id or event.request_id != post_id:
                 return
+            for _ in range(5):
+                try:
+                    body_result = await tab.send(
+                        cdp.network.get_response_body(event.request_id)
+                    )
+                    if body_result and body_result[0]:
+                        captured["response_body"] = body_result[0]
+                        break
+                except Exception:
+                    await asyncio.sleep(1)
+            intercept_done.set()
 
-            # Let all other requests through
-            try:
-                await tab.send(uc.cdp.fetch.continue_request(request_id=request_id))
-            except Exception:
-                pass
+        await tab.send(cdp.network.enable())
+        tab.add_handler(cdp.network.RequestWillBeSent, on_request_will_be_sent)
+        tab.add_handler(cdp.network.LoadingFinished, on_loading_finished)
 
-        async def _handle_response(event):
-            """Monitor network responses for generate/v2 — store request ID."""
-            url = event.response.url if event.response else ""
-            if "api/generate/v2" in url:
-                status_code = event.response.status if event.response else 0
-                status(f"generate/v2 response: {status_code}")
-                captured["generate_request_id"] = event.request_id
+        # ── Snapshot existing clip IDs (for DOM fallback) ─────────────────
+        existing_ids_json = await tab.evaluate("""
+            JSON.stringify(
+                [...document.querySelectorAll('a[href^="/song/"]')]
+                    .map(a => (a.href.match(/\\/song\\/([a-f0-9-]{36})/) || [])[1])
+                    .filter(Boolean)
+            )
+        """)
+        try:
+            existing_clip_ids = set(json.loads(existing_ids_json))
+        except Exception:
+            existing_clip_ids = set()
 
-        async def _handle_loading_finished(event):
-            """Fires when response body is fully received — safe to read body."""
-            gen_req_id = captured.get("generate_request_id")
-            if gen_req_id and event.request_id == gen_req_id:
-                for _ in range(3):
-                    try:
-                        body_result = await tab.send(
-                            uc.cdp.network.get_response_body(event.request_id)
-                        )
-                        if body_result and body_result[0]:
-                            captured["response_body"] = body_result[0]
-                            break
-                    except Exception:
-                        await asyncio.sleep(0.5)
-                intercept_done.set()
-
-        # Enable Fetch domain to intercept requests
-        await tab.send(uc.cdp.fetch.enable(
-            patterns=[
-                uc.cdp.fetch.RequestPattern(
-                    url_pattern="*api/generate/v2*",
-                    request_stage=uc.cdp.fetch.RequestStage.REQUEST,
-                )
-            ]
-        ))
-
-        # Enable Network domain for response monitoring
-        await tab.send(uc.cdp.network.enable())
-
-        # Register event handlers
-        tab.add_handler(uc.cdp.fetch.RequestPaused, _handle_request_paused)
-        tab.add_handler(uc.cdp.network.ResponseReceived, _handle_response)
-        tab.add_handler(uc.cdp.network.LoadingFinished, _handle_loading_finished)
-
-        # Click the Create button — try multiple strategies
-        status("Looking for Create button…")
+        # ── Click Create button ───────────────────────────────────────────
+        status("Clicking Create…")
+        await asyncio.sleep(1)
         click_result = await tab.evaluate("""
             (() => {
-                // Strategy 1: aria-label
-                let btn = document.querySelector('button[aria-label="Create"]');
-                if (btn && !btn.disabled) { btn.click(); return 'clicked_aria'; }
-                if (btn && btn.disabled) return 'disabled_aria';
-
-                // Strategy 2: exact text match
-                const btns = [...document.querySelectorAll('button')].filter(b => b.offsetParent !== null);
-                for (const b of btns) {
-                    const txt = b.textContent.trim();
-                    if (txt === 'Create') {
-                        if (b.disabled) return 'disabled_text:' + txt;
-                        b.click();
-                        return 'clicked_text:' + txt;
+                let btn = document.querySelector('button[aria-label="Create song"]');
+                if (!btn) {
+                    const btns = [...document.querySelectorAll('button')]
+                        .filter(b => b.offsetParent !== null);
+                    for (const b of btns) {
+                        const txt = b.textContent.trim();
+                        if (txt === 'Create' || txt.includes('Create')) {
+                            if (b.closest('[class*="playbar"]') || b.closest('nav')) continue;
+                            if (txt.includes('Workspace') || txt.includes('New')) continue;
+                            btn = b;
+                            break;
+                        }
                     }
                 }
-
-                // Strategy 3: button containing "Create" but NOT nav links
-                for (const b of btns) {
-                    const txt = b.textContent.trim();
-                    // Skip nav items (they tend to have single words or icons)
-                    if (txt.length > 30) continue;
-                    if (txt.includes('Create') && !b.closest('nav') && !b.closest('[class*="sidebar"]') && !b.closest('[class*="nav"]')) {
-                        if (b.disabled) return 'disabled_partial:' + txt;
-                        b.click();
-                        return 'clicked_partial:' + txt;
-                    }
+                if (!btn) return 'NOT_FOUND';
+                if (btn.disabled) {
+                    btn.disabled = false;
+                    btn.click();
+                    return 'FORCE_CLICKED';
                 }
-
-                // Strategy 4: submit button
-                btn = document.querySelector('button[type="submit"]');
-                if (btn && !btn.disabled) { btn.click(); return 'clicked_submit'; }
-                if (btn && btn.disabled) return 'disabled_submit';
-
-                return 'not_found';
+                btn.click();
+                return 'clicked';
             })()
         """)
-        status(f"Create click: {click_result}")
+        status(f"Create: {click_result}")
 
-        if "not_found" in str(click_result) or "disabled" in str(click_result):
-            status("Create button not clickable — will wait for you to click it manually")
-
-        # Wait for the user to solve captcha and the request to be intercepted
-        status("Waiting for captcha to be solved…")
+        # ── Wait for generation ───────────────────────────────────────────
+        status("Waiting for generation… (solve captcha if prompted)")
         deadline = asyncio.get_event_loop().time() + timeout
 
-        # Also periodically check for captcha iframe and hCaptcha state
-        check_count = 0
         while asyncio.get_event_loop().time() < deadline:
             try:
                 await asyncio.wait_for(intercept_done.wait(), timeout=10.0)
                 break
             except asyncio.TimeoutError:
-                check_count += 1
-                # Check if browser is still open
                 try:
                     _ = browser.tabs
                 except Exception:
-                    raise RuntimeError("Browser was closed before captcha was solved.")
-
-                # Periodically check captcha state
-                if check_count % 3 == 0:
-                    try:
-                        captcha_state = await tab.evaluate("""
-                            JSON.stringify({
-                                hasCaptcha: !!document.querySelector('iframe[title*="hCaptcha"], iframe[src*="hcaptcha"], iframe[title*="captcha"]'),
-                                hasModal: !!document.querySelector('[class*="modal"], [role="dialog"]'),
-                                url: window.location.href
-                            })
-                        """)
-                        status(f"State: {captcha_state}")
-                    except Exception:
-                        pass
+                    raise RuntimeError("Browser was closed!")
                 continue
 
-        if not intercept_done.is_set():
-            raise RuntimeError(
-                f"Timed out waiting for captcha after {int(timeout)}s. Please try again."
-            )
-
-        # Parse response
+        # ── Parse results ─────────────────────────────────────────────────
         clips = []
         if captured["response_body"]:
             try:
-                resp_data = json.loads(captured["response_body"])
-                clips = resp_data.get("clips", [])
+                resp = json.loads(captured["response_body"])
+                clips = resp.get("clips", [])
             except Exception:
                 pass
 
-        status(f"Captcha solved! Got {len(clips)} clip(s) from browser generation.")
-        await asyncio.sleep(2)
+        # DOM fallback if CDP didn't capture
+        if not clips:
+            status("Extracting clip IDs from page…")
+            for wait_round in range(10):
+                await asyncio.sleep(3)
+                dom_json = await tab.evaluate("""
+                    JSON.stringify(
+                        [...document.querySelectorAll('a[href^="/song/"]')]
+                            .map(a => (a.href.match(/\\/song\\/([a-f0-9-]{36})/) || [])[1])
+                            .filter(Boolean)
+                    )
+                """)
+                try:
+                    all_ids = set(json.loads(dom_json))
+                    new_ids = all_ids - existing_clip_ids
+                    if new_ids:
+                        clips = [{"id": cid, "status": "submitted"} for cid in new_ids]
+                        break
+                except Exception:
+                    pass
 
-        result = {
-            "token": captured.get("token", ""),
-            "authorization": captured.get("authorization", ""),
-            "clips": clips,
-        }
-
-        return result
+        status(f"Got {len(clips)} clip(s)")
+        return clips
 
     finally:
         try:
