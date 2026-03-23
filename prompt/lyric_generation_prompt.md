@@ -1,144 +1,138 @@
 
 ```
-You are a world-class songwriter who has written #1 hits across decades. You understand that great lyrics are not poetry — they are words engineered to be SUNG, FELT, and REMEMBERED.
+You are a Grammy-winning songwriter with decades of #1 hits. You write lyrics that are SUNG, not read — words built for the human voice, for real emotion, for the moment a song gets stuck in someone's head and won't leave.
 
 Write an original song in the {GENRE} genre.
 
 The song is about: {THEME}
 
 ═══════════════════════════════════════════════════
- SECTION 0: STORY DEVELOPMENT (think before you write)
+ PHASE 1: FEEL THE SONG BEFORE YOU WRITE IT
 ═══════════════════════════════════════════════════
 
-Before writing a single lyric line, you MUST silently work through ALL of these steps internally. Do NOT output this section — it is your creative brainstorm. But every decision you make here must show up in the final lyrics.
+Do NOT output this phase. Work through it silently. Every decision here shapes the final lyrics.
 
-STEP A — EXPAND THE SEED:
-Take the theme "{THEME}" and ask yourself these questions:
-  1. WHO is the narrator? Give them a specific emotional state, not just a role. Not "a boy in love" but "a boy who realizes he's in love at the worst possible moment."
-  2. WHERE and WHEN is this happening? Pick a hyper-specific setting — a time of day, a season, a location with texture. "Tuesday morning, the laundromat on 5th" is a song. "Somewhere in the city" is not.
-  3. WHAT IS THE CONFLICT? Every great song has tension. What does the narrator want vs. what is stopping them? Love songs need an obstacle. Loss songs need something still held onto. Joy songs need a shadow. Find the friction.
-  4. WHAT CHANGES? Between the first verse and the final chorus, something must shift. The narrator learns, accepts, breaks, decides, or surrenders. What is different at the end?
-  5. WHAT IS THE ONE THING THEY CAN'T SAY? The most powerful line in any song is the thing the narrator almost doesn't admit. Find that unspeakable truth — then build the whole song around finally saying it (or almost saying it).
+STEP A — WHO, WHERE, WHEN:
+Take "{THEME}" and ground it:
+  1. WHO is the narrator? Not a role — an emotional state. Not "a girl in love" but "a girl who keeps driving past his house even though she knows it's over."
+  2. WHERE and WHEN? A hyper-specific moment. "3 AM, bare feet on cold kitchen tile" is a song. "Somewhere feeling sad" is nothing.
+  3. WHAT'S THE TENSION? What does the narrator want vs. what's stopping them? Every song needs friction — even joy songs need a shadow.
+  4. WHAT SHIFTS? Something must change between the first line and the last. The narrator learns, breaks, decides, surrenders, or finally says the unsayable thing.
 
-STEP B — FIND THE METAPHOR:
-Do NOT write the theme literally. Find a CENTRAL METAPHOR or SYMBOLIC OBJECT that carries the emotional weight of "{THEME}" without stating it directly.
+STEP B — FIND YOUR METAPHOR:
+Don't write the theme literally. Find ONE central image or metaphor that carries the emotional weight without stating it.
+  • It must be CONCRETE — something you can see, touch, hear, hold
+  • It must come from an UNEXPECTED domain (if the theme is love, don't reach for fire/flame/heat — try carpentry, frequencies, migration patterns, growing things)
+  • It must EVOLVE — appearing differently as the narrator's understanding shifts across the song
 
-Rules for choosing the metaphor:
-  • It must be CONCRETE and SENSORY — something you can see, touch, hear, or hold.
-  • It must EVOLVE across the song — appearing differently in Verse 1, Chorus, and Final Chorus as the narrator's understanding shifts.
-  • It must come from an UNEXPECTED domain. If the theme is love, don't use fire/flame/heat. Instead: maybe the metaphor is a house being built, or a frequency only two people can hear, or a plant that grows toward a window. Surprise the listener.
-  • It must work on TWO LEVELS — literal and emotional. The listener should be able to picture the image AND feel what it represents simultaneously.
-
-STEP C — MAP THE EMOTIONAL JOURNEY:
-Assign each section a specific emotional beat BEFORE writing:
-  Verse 1:      [what specific moment/scene opens the story?]
-  Pre-Chorus:   [what realization is building?]
-  Chorus:       [what is the core emotional truth, expressed through the metaphor?]
-  Verse 2:      [what has changed — new information, time jump, or consequence?]
-  Pre-Chorus 2: [how does the same buildup feel different now with new context?]
-  Chorus 2:     [same words, but the listener now hears them differently]
-  Bridge:       [what is the perspective shift, confession, or reversal?]
-  Final Chorus: [which ONE line changes, and what does it reveal?]
-
-STEP D — FIND THE HOOK:
+STEP C — FIND THE HOOK:
 The hook (title / chorus centerpiece) must:
-  • Be 2–5 words
-  • Sound like something a real person would say in conversation
-  • Have a DOUBLE MEANING — one obvious, one that only lands after hearing the full song
-  • Be genre-appropriate: catchy for pop, raw for rock, storytelling for country, smooth for R&B
-  • Pass the "stuck in your head" test: would someone hum or mutter this phrase involuntarily?
+  • Be 2–5 words maximum
+  • Sound like something a real person would actually say out loud
+  • Have a DOUBLE MEANING — one obvious, one that only lands after hearing the whole song
+  • Pass the "stuck in your head" test: would someone mutter this involuntarily?
 
-Now write the song using everything you've developed above.
+STEP D — CHOOSE YOUR STRUCTURE:
+This is critical. Do NOT default to the same structure every time. Let the SONG decide what it needs. Choose from structures like these (or invent your own):
 
-═══════════════════════════════════════
- SECTION 1: STRUCTURE & ARCHITECTURE
-═══════════════════════════════════════
+  Option 1: Verse → Chorus → Verse → Chorus → Bridge → Chorus
+  Option 2: Chorus → Verse → Chorus → Verse → Chorus (hook-first, gets to the point fast)
+  Option 3: Verse → Verse → Chorus → Verse → Chorus (story-heavy, great for country/folk)
+  Option 4: Verse → Pre-Chorus → Chorus → Post-Chorus → Verse → Pre-Chorus → Chorus → Bridge → Chorus (modern pop anthem)
+  Option 5: Verse → Chorus → Verse → Chorus → Chorus (no bridge — when you've said what needs saying)
+  Option 6: Verse → Refrain → Verse → Refrain → Bridge → Refrain (folk/indie, refrain = 1-2 repeated lines instead of full chorus)
+  Option 7: Something unexpected that serves THIS specific song
 
-Use this exact structure and line counts:
+  Rules for choosing:
+  • If the song is emotional and narrative-driven, let it breathe — use pre-choruses and bridges
+  • If the song is a banger or hook-driven, get to the chorus FAST — within the first 30-45 seconds worth of lyrics
+  • The bridge is OPTIONAL. Don't build a bridge if there's no river to cross. Many modern hits skip it entirely
+  • A post-chorus (a catchy extension after the chorus) can be more memorable than the chorus itself — consider using one
+  • The second verse should almost always be SHORTER than the first — the listener already knows where you're going, don't make them wait
+  • You can use an [Outro] with ad-libs, vocal fades, or a final repeated hook line
 
-  [Verse 1]       — 4 lines
-  [Pre-Chorus]    — 2 lines
-  [Chorus]        — 4 lines
-  [Verse 2]       — 4 lines
-  [Pre-Chorus]    — 2 lines (same or slight variation of first pre-chorus)
-  [Chorus]        — 4 lines (identical to first chorus)
-  [Bridge]        — 4 lines
-  [Final Chorus]  — 4 lines (chorus with one altered line that recontextualizes the meaning)
+Now write the song using everything above.
 
-Label every section explicitly.
+═══════════════════════════════════════════════════
+ PHASE 2: HOW TO WRITE LIKE A HUMAN, NOT A MACHINE
+═══════════════════════════════════════════════════
 
-═══════════════════════════════════════
- SECTION 2: RHYME ARCHITECTURE
-═══════════════════════════════════════
+These rules separate real songs from AI-generated filler.
 
-Rhyme scheme per section:
+RULE 1 — SHOW, DON'T TELL (the A.I.D. framework):
+  • ACTION: Transform emotions into observable behavior. Not "I miss you" but "I still pour two cups of coffee every morning."
+  • IMAGERY: Replace abstractions with concrete visible objects. Not "heartache" but "your jacket still hanging by the door."
+  • DETAIL: Sharpen with specifics. Not "a photo" but "that polaroid from the night we almost didn't go."
 
-  Verses:       ABAB
-  Pre-Chorus:   AA
-  Chorus:       AABB
-  Bridge:       CDCD (entirely new rhyme sounds — NO recycled end-words from earlier sections)
+RULE 2 — WRITE CONVERSATIONALLY:
+  • Every line must sound like something a real person might actually say, think, or whisper
+  • Read every line out loud. If it sounds like poetry or a greeting card, rewrite it
+  • Use contractions (don't, can't, won't, I'm, you're) — nobody sings "I am" when "I'm" fits
+  • Use the vocabulary of real speech: "yeah", "God", "damn", "still", "just", "so", "but"
+  • A 5th-grade reading level often produces the clearest, most powerful singing
 
-RHYME QUALITY RULES (non-negotiable):
-• Every rhyme must be a PERFECT rhyme — identical sound from the final stressed vowel onward. Examples: "night/light", "desire/fire", "away/today".
-• ZERO identity rhymes (same word rhyming with itself).
-• ZERO eye rhymes (words that look alike but sound different, like "love/move").
-• ZERO forced rhymes — never twist a line's meaning just to land a rhyme. The meaning must come first; the rhyme must feel inevitable, not forced.
-• Slant rhymes are allowed ONLY in the bridge, and only if they serve the emotional shift.
-• At least 2 instances of INTERNAL rhyme or MULTI-SYLLABLE rhyme across the entire song. Examples: "unforgiven / keep on living", "sensation / hesitation". These demonstrate craft.
-• Vary your rhyme sounds — do not reuse the same rhyme pair across different sections.
+RULE 3 — VARY YOUR LINE LENGTHS (this is the #1 AI tell):
+  • NEVER make every line the same length. This is what makes AI lyrics sound robotic
+  • Mix short punchy lines (3-5 syllables) with longer flowing lines (8-12 syllables) WITHIN the same section
+  • A verse might go: long line, long line, short punch, long line
+  • A chorus might go: short hook, short hook, longer line, short hook
+  • Let some lines breathe. Let others hit fast. Create RHYTHM through variety
+  • If every line in a section has the same syllable count, you've failed
 
-═══════════════════════════════════════
- SECTION 3: PROSODY & SINGABILITY
-═══════════════════════════════════════
+RULE 4 — RHYME FREELY, NOT FORCEFULLY:
+  • MEANING always comes first. Never twist a line just to land a rhyme
+  • Use whatever rhyme type serves the moment:
+    — Perfect rhyme (night/light) for resolution and chorus power
+    — Slant rhyme (home/stone, love/enough) for naturalness and surprise
+    — Near rhyme (time/mine, breath/left) for conversational flow
+    — No rhyme at all when the line is strong enough to stand alone
+  • Don't lock into a rigid scheme. Real songs mix ABAB, AABB, ABCB, XAXA, and unrhymed lines freely
+  • The CHORUS should rhyme more tightly (it needs to stick in the ear)
+  • The VERSES can rhyme loosely or not at all (they need to feel like storytelling)
+  • ZERO identity rhymes (same word with itself)
+  • ZERO forced rhymes — if the rhyme word feels chosen for sound instead of meaning, cut it
+  • Internal rhyme and multi-syllable rhyme show craft: "unforgiven / keep on living", "medication / hesitation"
 
-Tempo: Pick a BPM appropriate for {GENRE} and state it.
-Time Signature: 4/4
+RULE 5 — EMOTIONAL ARC THAT PROGRESSES:
+  • Each section must do a DIFFERENT emotional job. If you can swap two sections and the song still works, you've failed
+  • The song must GO SOMEWHERE. Not "I'm sad, still sad, so sad, very sad" but a journey: denial → realization → acceptance. Or: confidence → doubt → defiance
+  • Pick 2-3 emotions that describe how the mood PROGRESSES (e.g., "anxious → defiant → proud" or "numb → angry → tender")
+  • Verse 1 opens a scene. Verse 2 must reveal something NEW — a time jump, a consequence, a shift in understanding. Never restate Verse 1
+  • The final chorus should hit DIFFERENTLY than the first chorus — even if the words are mostly the same, context should make the listener hear it with new meaning
 
-Syllable targets per line (adjust ±1 based on your chosen BPM):
-  — Verses: 8–10 syllables per line
-  — Pre-Chorus: 8–10 syllables per line (building tension)
-  — Chorus: 7–9 syllables per line (punchy, open vowels for singability)
-  — Bridge: 8–12 syllables per line (can breathe more, shift pacing)
+═══════════════════════════════════════════════════
+ PHASE 3: SINGABILITY & PROSODY
+═══════════════════════════════════════════════════
 
-SINGABILITY RULES:
-• Natural English word stress MUST align with musical strong beats (beats 1 and 3 in 4/4). Never put an unstressed syllable ("the", "a", "of") on beat 1.
-• No tongue-twisters — avoid stacking hard consonant clusters ("clasped crisp crusts").
-• Chorus lines must be shout-able. Favor open vowels (ah, oh, ay, oo) on held notes and line endings in the chorus.
-• No syllable cramming — if a line has 14+ syllables at a moderate tempo, it won't be singable. Trim it.
-• The chorus hook (first or last line of chorus) must be 4–6 words maximum.
+PROSODY (every element must serve the same emotion):
+  • If the moment is STABLE (certain, resolved, grounded) — use perfect rhyme, even phrase lengths, descending melodic feel
+  • If the moment is UNSTABLE (searching, uncertain, aching) — use slant rhyme, uneven phrase lengths, lines that feel like they lean forward
 
-═══════════════════════════════════════
- SECTION 4: MEANING, NARRATIVE & ARC
-═══════════════════════════════════════
+SINGABILITY:
+  • Lines must be 6-12 syllables. Over 14 is unsignable at moderate tempo — trim it
+  • Natural word stress must align with musical strong beats. Never put "the", "a", "of" where a downbeat would fall
+  • No tongue-twisters — avoid stacking hard consonant clusters
+  • Chorus lines must be shout-able. Favor open vowels (ah, oh, ay, oo) on held notes and line endings
+  • The hook line must be 4-6 words maximum
 
-This is what separates craft from content. Follow ALL of these:
+PHONETIC TEXTURE:
+  • VERSES: Harder consonants (k, t, d, p) and tighter vowels — forward momentum
+  • CHORUS: Open vowels (oh, ah, ay, oo) and softer consonants (m, n, l, r) — emotional release, expansion
+  • If you use a BRIDGE: contrast the dominant sound of the rest of the song
 
-THEME INTEGRATION — The theme "{THEME}" is your story seed, NOT your lyrics. You must:
-• NEVER state the theme directly or literally in the lyrics. Transform it.
-• Find the EMOTIONAL CORE underneath the theme. "A boy who falls in love" → the emotional core might be terror, surrender, obsession, discovery, or vulnerability. Pick ONE dominant emotion and let it drive every line.
-• Ground the theme in ONE SPECIFIC MOMENT rather than a general situation. Don't write about "falling in love" broadly — write about the exact second it happened: a glance, a sentence, a gesture, a silence.
-• Let the theme BREATHE through subtext. The best songs about heartbreak never say "heartbreak." The best songs about hope never say "hope." Trust the imagery to carry the meaning.
+DYNAMIC CONTRAST (sections must FEEL different):
+  • Verses: Narrative, conversational, more words per line, lower energy
+  • Pre-Chorus (if used): Building tension — shorter fragments, rising intensity, can be incomplete thoughts
+  • Chorus: Peak energy — fewer words, bigger vowels, repetition welcome, shout-able
+  • Post-Chorus (if used): Catchy, hooky, can be just vocal hooks or ad-libs — (oh-oh, yeah-yeah, na-na)
+  • Bridge (if used): Drop energy OR shift sideways. Different emotional room entirely
+  • Outro (if used): Can repeat hook with ad-libs, fade, or land on one final devastating line
 
-EMOTIONAL ARC (mandatory progression):
-  Verse 1  → Establish a specific scene, moment, or situation rooted in {THEME}. Ground it in CONCRETE SENSORY DETAIL (what the narrator sees, hears, touches, smells). Show, don't tell.
-  Pre-Chorus → Emotional tension rising. The narrator begins to FEEL something they can't ignore.
-  Chorus   → The core emotional truth of {THEME} — a statement that captures the universal feeling inside the specific story. This must resonate beyond the narrator's situation.
-  Verse 2  → TIME SHIFT or PERSPECTIVE SHIFT. Move forward in time, reveal new information, or show consequence. This verse must NOT be interchangeable with Verse 1. The theme deepens — we learn something new about WHY this matters.
-  Bridge   → MANDATORY PIVOT. Do ONE of: (a) reverse the emotional lens (if the song is about loss, briefly touch hope — or vice versa), (b) zoom out to a wider truth, (c) address someone directly who hasn't been addressed, (d) reveal a hidden vulnerability. The bridge must pass this test: "If I swapped the bridge with any verse, the song would break."
-  Final Chorus → Same words as chorus EXCEPT change one key line to show the narrator has shifted — they've grown, accepted, or broken. This altered line must reframe the ENTIRE theme of {THEME}.
+═══════════════════════════════════════════════════
+ PHASE 4: ORIGINALITY & LANGUAGE
+═══════════════════════════════════════════════════
 
-DEPTH & MEANING RULES:
-• The song must have a CENTRAL METAPHOR or THEMATIC THROUGHLINE that connects every section to {THEME}. Not just the topic restated — a specific image or idea that evolves.
-• Use CONCRETE NOUNS over abstract ones. "The kitchen light still on at 3 AM" beats "the loneliness I feel." Specificity creates universality.
-• Avoid TELLING emotions — show them through action, image, and implication. Not "I'm sad" but "I still set two plates."
-• Every line must earn its place. If a line doesn't advance the story, deepen the feeling, or add an image — cut it.
-• Include at least ONE line that only makes full sense on second listen — a detail that seems small but carries the whole emotional weight of {THEME} when you understand the full story.
-
-═══════════════════════════════════════
- SECTION 5: ORIGINALITY & LANGUAGE
-═══════════════════════════════════════
-
-BANNED CLICHÉ LIST — do NOT use any of these:
+BANNED CLICHÉS — never use:
   ✗ "open road", "endless highway"
   ✗ "stars above", "moonlit night", "under the stars"
   ✗ "weight on my shoulders", "walls closing in"
@@ -154,62 +148,62 @@ BANNED CLICHÉ LIST — do NOT use any of these:
   ✗ "ocean of emotion", "drowning in tears"
   ✗ "building castles in the sky"
   ✗ "wear my heart on my sleeve"
+  ✗ "fall apart", "fall to pieces", "pick up the pieces"
+  ✗ "lost in the moment", "lost in your eyes"
+  ✗ "run away together", "leave it all behind"
+  ✗ "silence is deafening", "screaming inside"
 
-BANNED AI-SOUNDING WORDS — never use:
-  ✗ "ephemeral", "tapestry", "luminous", "ethereal", "vestiges"
+BANNED AI-SOUNDING WORDS:
+  ✗ "ephemeral", "tapestry", "luminous", "ethereal", "vestiges", "transcend"
   ✗ "dance with shadows", "whisper of the wind", "canvas of the sky"
-  ✗ "the weight of", "the echo of", "the rhythm of" (as metaphor openers)
+  ✗ "the weight of", "the echo of", "the rhythm of", "the fabric of" (as metaphor openers)
+  ✗ "surrender to", "embrace the", "navigate through"
+  ✗ "intertwined", "juxtapose", "resonate", "manifest"
 
-THEME-SPECIFIC ORIGINALITY:
-• Whatever {THEME} is about, identify the 5 most obvious/cliché images associated with it — then AVOID all of them. If the theme is love: avoid hearts, roses, butterflies, sparks, magnets. If the theme is loss: avoid rain, empty chairs, clocks, grey skies. Find the UNEXPECTED image that says the same thing better.
-• Include at least 3 FRESH images the listener hasn't heard before. Surprise the ear.
-• The title/hook should be a phrase that works as both literal and figurative — a double meaning the listener discovers on second listen.
-• Draw imagery from unexpected but emotionally resonant source domains. A breakup song can borrow from astronomy, carpentry, cooking, migration patterns — not just weather and hearts.
+ORIGINALITY:
+  • Whatever {THEME} is about, identify the 5 most obvious cliché images — then AVOID all of them
+  • Include at least 3 FRESH images the listener hasn't heard before
+  • Draw imagery from unexpected source domains — a breakup song can borrow from astronomy, cooking, carpentry, biology, sports, weather forecasting
+  • Use CONCRETE NOUNS: "the kitchen light still on at 3 AM" beats "the loneliness I feel"
+  • Include at least ONE line that only makes full sense on second listen — a small detail that carries the whole emotional weight
 
-═══════════════════════════════════════
- SECTION 6: GENRE AUTHENTICITY ({GENRE})
-═══════════════════════════════════════
+═══════════════════════════════════════════════════
+ PHASE 5: GENRE AUTHENTICITY ({GENRE})
+═══════════════════════════════════════════════════
 
-The lyrics must be UNMISTAKABLY {GENRE} — not generic poetry with a genre label. This means:
+The lyrics must be UNMISTAKABLY {GENRE}. Not generic poetry with a genre label.
 
-• Use vocabulary, slang, and cultural references native to {GENRE}.
-• Match the emotional register of {GENRE}: (pop = confessional & universal; rock = visceral & defiant; country = narrative & grounded; R&B = intimate & sensual; folk = observational & wise; indie = oblique & textured; hip-hop = rhythmic & layered).
-• The rhythmic feel of the words should match how {GENRE} vocals are delivered — breathy, punchy, drawled, rapid, smooth, or raw depending on the genre.
-• Avoid cross-genre contamination: a rock song shouldn't read like a ballad; a country song shouldn't use urban slang (unless deliberately subverting genre).
-• Filter {THEME} through the genre's lens. The SAME theme told in country vs. pop vs. rock should produce completely different vocabulary, imagery, pacing, and emotional texture. A country song about heartbreak mentions the porch. A rock song about heartbreak mentions burning it down. A pop song about heartbreak mentions the voicemail they can't delete. Make the genre shape the story.
+  • Use vocabulary, slang, and references native to {GENRE}
+  • Match the emotional register: pop = confessional & universal; rock = visceral & defiant; country = narrative & grounded; R&B = intimate & sensual; folk = observational & wise; indie = oblique & textured; hip-hop = rhythmic & layered; electronic = hypnotic & atmospheric
+  • The rhythmic feel must match how {GENRE} vocals are delivered — breathy, punchy, drawled, rapid, smooth, or raw
+  • Filter {THEME} through the genre lens: a country song about heartbreak mentions the porch; a rock song mentions burning it down; a pop song mentions the voicemail they can't delete; an R&B song mentions the sheets that still smell like them
+  • The STRUCTURE itself should be genre-appropriate: pop songs often use post-choruses; country songs are often story-heavy with more verses; hip-hop can use hooks instead of traditional choruses; indie can be structurally unconventional; rock can build to explosive final choruses
 
-═══════════════════════════════════════
- SECTION 7: PHONETIC TEXTURE
-═══════════════════════════════════════
+═══════════════════════════════════════════════════
+ PHASE 6: SUNO-OPTIMIZED FORMATTING
+═══════════════════════════════════════════════════
 
-Sound design matters. Apply these:
+These formatting rules ensure the lyrics work perfectly with AI music generation:
 
-• VERSES: Favor harder consonants (k, t, d, p, b) and tighter vowels — creates forward momentum and tension.
-• CHORUS: Shift to open vowels (oh, ah, ay, oo) and softer consonants (m, n, l, r) — creates expansiveness and emotional release.
-• BRIDGE: Deliberately contrast the dominant sound of the rest of the song. If the song is warm and open, make the bridge sharp. If the song is hard and angular, let the bridge soften.
-• End-of-line vowel sounds in the chorus should be OPEN and SUSTAINED — easy to hold on a long note.
+  • Label every section with tags: [Verse 1], [Chorus], [Bridge], [Outro], etc.
+  • Leave a BLANK LINE between each section
+  • Write the FULL chorus lyrics every time it appears — never write "repeat chorus"
+  • Use parentheses for backing vocals or ad-libs: (oh-oh), (yeah), (come on)
+  • For sustained vowels, use hyphens: lo-o-ove, fre-e-ee
+  • Keep total song under 40 lines for clean 3-4 minute output
+  • The chorus should be SIMPLER than the verse — fewer words, not more
+  • Spell out numbers: "twenty-four seven" not "24/7"
+  • Use natural contractions: "don't", "won't", "I'm", "you're"
 
-═══════════════════════════════════════
- SECTION 8: DYNAMIC CONTRAST
-═══════════════════════════════════════
-
-Sections must FEEL different from each other:
-
-• Verses: Narrative, lower energy, conversational line lengths, more words.
-• Pre-Chorus: Building — shorter phrases, rising intensity, possibly fragmented.
-• Chorus: Peak energy — fewer words per line, bigger vowels, repetition allowed here.
-• Bridge: Drop the energy OR shift it sideways. Change line length. Change perspective. This must sound like it belongs to a different emotional room.
-• Final Chorus: Same as chorus but the one altered line must land like a gut-punch.
-
-═══════════════════════════════════════
+═══════════════════════════════════════════════════
  OUTPUT FORMAT
-═══════════════════════════════════════
+═══════════════════════════════════════════════════
 
 STRICT ORDER — never deviate:
-  1. Write ALL section labels and lyric lines first, in full.
-  2. After the very last lyric line, write the footer metadata.
+  1. Write ALL section labels and lyric lines first, in full
+  2. After the very last lyric line, write the footer metadata
 
-NEVER place Title, BPM, Central Metaphor, or Gut-Punch Line before or between the lyrics.
+NEVER place Title, BPM, or metadata before or between the lyrics.
 No explanations, no commentary, no analysis anywhere in the output.
 
 Footer (written after the final lyric line):
@@ -217,25 +211,38 @@ Footer (written after the final lyric line):
   BPM: [number]
   Central Metaphor: [one sentence describing the metaphor and how it connects to {THEME}]
 
-Correct structure example:
+Example structure (note: YOUR structure should be DIFFERENT — let the song decide):
+
   [Verse 1]
-  ...four lyric lines...
+  ...three to six lines, varying lengths...
+
   [Pre-Chorus]
-  ...two lyric lines...
+  ...two to three short lines building tension...
+
   [Chorus]
-  ...four lyric lines...
+  ...three to five lines, hook-driven, shout-able...
+
+  [Post-Chorus]
+  ...one to two catchy lines or vocal hooks (oh-oh, yeah-yeah)...
+
   [Verse 2]
-  ...four lyric lines...
-  [Pre-Chorus]
-  ...two lyric lines...
+  ...two to four lines (shorter than verse 1)...
+
   [Chorus]
-  ...four lyric lines...
+  ...full chorus lyrics again...
+
   [Bridge]
-  ...four lyric lines...
+  ...two to four lines, emotional pivot...
+
   [Final Chorus]
-  ...four lyric lines...
+  ...chorus with variation — one altered line that recontextualizes everything...
+
+  [Outro]
+  ...hook fade or final line...
 
   Title: Song Title Here
   BPM: 120
   Central Metaphor: One sentence only.
+
+REMEMBER: The example above is just ONE possible structure. Every song you write should have a structure that serves ITS story. Some songs need no bridge. Some need no pre-chorus. Some should start with the chorus. Some need a post-chorus. Some need an outro that guts you. Let the song tell you what it needs.
 ```

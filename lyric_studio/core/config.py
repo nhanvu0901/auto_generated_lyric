@@ -6,6 +6,7 @@ from pathlib import Path
 DEFAULT_CONFIG = {
     "model": "claude-opus-4-6",
     "output_folder": "",
+    "song_output_folder": "",
     "default_genre": "Pop",
     "file_naming": "numbered",
     "setup_complete": False,
@@ -20,8 +21,6 @@ MODELS = {
     "Opus 4.6": "claude-opus-4-6",
     "Sonnet 4.6": "claude-sonnet-4-6",
 }
-
-GENRES = ["Pop", "Rock", "Country", "R&B", "Folk", "Indie", "Hip-Hop"]
 
 SUNO_MODELS = {
     # Free tier and above
@@ -43,6 +42,10 @@ def get_default_output_folder() -> str:
     return str(Path.home() / "LyricStudio" / "output")
 
 
+def get_default_song_folder() -> str:
+    return str(Path.home() / "LyricStudio" / "songs")
+
+
 def load_config() -> dict:
     if CONFIG_FILE.exists():
         try:
@@ -51,12 +54,15 @@ def load_config() -> dict:
                 config.setdefault(key, val)
             if not config["output_folder"]:
                 config["output_folder"] = get_default_output_folder()
+            if not config.get("song_output_folder"):
+                config["song_output_folder"] = get_default_song_folder()
             return config
         except (json.JSONDecodeError, OSError):
             pass
 
     config = DEFAULT_CONFIG.copy()
     config["output_folder"] = get_default_output_folder()
+    config["song_output_folder"] = get_default_song_folder()
     return config
 
 

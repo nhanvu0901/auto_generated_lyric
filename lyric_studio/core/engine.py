@@ -118,22 +118,6 @@ def install_claude_code() -> tuple[bool, str]:
         return False, f"Installation error: {e}"
 
 
-def open_claude_login() -> tuple[bool, str]:
-    """Run claude login to authenticate."""
-    try:
-        import subprocess
-        result = subprocess.run(
-            ["claude", "login"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if result.returncode == 0:
-            return True, "Login successful!"
-        return False, f"Login issue: {result.stderr or result.stdout}"
-    except Exception as e:
-        return False, f"Login error: {e}"
-
 
 def load_lyric_prompt_template() -> str:
     """Load the lyric generation prompt, extracting content from the code block."""
@@ -233,6 +217,7 @@ def generate_lyrics(
             max_turns=1,
             allowed_tools=[],
             include_partial_messages=True,
+            thinking={"type": "enabled", "budget_tokens": 10000},
         )
 
         prog(f"[Batch {batch_idx+1}/{total_batches}] Connecting to Claude ({model})…")

@@ -73,7 +73,25 @@
       "WebFetch(domain:medium.com)",
       "WebFetch(domain:stackoverflow.com)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); d[''''suno_cookie'''']=''''''''; print\\(json.dumps\\(d,indent=2\\)\\)\")",
-      "Bash(mv /tmp/settings_tmp.json ~/.lyric_studio/settings.json)"
+      "Bash(mv /tmp/settings_tmp.json ~/.lyric_studio/settings.json)",
+      "WebFetch(domain:www.hitsongsdeconstructed.com)",
+      "WebFetch(domain:mysongcoach.com)",
+      "WebFetch(domain:jackrighteous.com)",
+      "WebFetch(domain:flypaper.soundfly.com)",
+      "WebFetch(domain:lyricsdetector.com)",
+      "WebFetch(domain:www.shepbryan.com)",
+      "WebFetch(domain:americansongwriter.com)",
+      "WebFetch(domain:www.musicbusinessworldwide.com)",
+      "WebFetch(domain:www.patpattison.com)",
+      "WebFetch(domain:online.berklee.edu)",
+      "WebFetch(domain:greenhillsguitarstudio.com)",
+      "WebFetch(domain:songtown.com)",
+      "WebFetch(domain:www.nashvillesongwriters.com)",
+      "WebFetch(domain:www.bmi.com)",
+      "WebFetch(domain:hookgenius.app)",
+      "WebFetch(domain:soundcharts.com)",
+      "WebFetch(domain:howtopromptsuno.com)",
+      "WebFetch(domain:www.songaifarm.com)"
     ]
   }
 }

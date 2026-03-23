@@ -12,7 +12,7 @@ from pathlib import Path
 
 import flet as ft
 
-from core.config import GENRES, MODELS, SUNO_MODELS, load_config, save_config
+from core.config import MODELS, SUNO_MODELS, load_config, save_config
 from core.engine import (
     generate_lyrics,
     install_claude_code,
@@ -145,6 +145,7 @@ def main(page: ft.Page):
         spacing=4,
         visible=False,
         scroll=ft.ScrollMode.AUTO,
+        auto_scroll=True,
         height=120,
     )
     setup_log_card = ft.Container(
@@ -241,14 +242,14 @@ def main(page: ft.Page):
         expand=True,
     )
 
-    genre_dd = ft.Dropdown(
+    genre_dd = ft.TextField(
         label="Genre",
         label_style=ft.TextStyle(color=DIM, size=12),
         border_color=BORDER, focused_border_color=ACCENT,
         bgcolor=SURFACE2, color=TEXT, border_radius=10,
-        options=[ft.dropdown.Option(g) for g in GENRES],
         value=config.get("default_genre", "Pop"),
         width=150, text_size=14,
+        content_padding=ft.padding.symmetric(horizontal=16, vertical=14),
     )
 
     model_dd = ft.Dropdown(
@@ -276,7 +277,7 @@ def main(page: ft.Page):
     progress_text = ft.Text("", size=13, color=DIM)
     progress_bar  = ft.ProgressBar(visible=False, color=ACCENT, bgcolor=SURFACE2, height=3)
 
-    gen_log = ft.Column([], spacing=3, scroll=ft.ScrollMode.AUTO, height=110)
+    gen_log = ft.Column([], spacing=3, scroll=ft.ScrollMode.AUTO, auto_scroll=True, height=110)
     gen_log_card = ft.Container(
         content=gen_log,
         bgcolor="#0A0D14",
@@ -340,6 +341,7 @@ def main(page: ft.Page):
     # ── Suno integration UI ────────────────────────────────────────────────────
     _folder_songs: list[dict] = []
     _suno_checked: dict[int, bool] = {}
+    _song_checkboxes: list[ft.Checkbox] = []
 
     # Resolve current model label from config
     _current_suno_model_id = config.get("suno_model", "chirp-auk")
@@ -370,7 +372,7 @@ def main(page: ft.Page):
         on_click=lambda e: do_generate_suno(e),
     )
     suno_status_text = ft.Text("", size=12, color=DIM)
-    suno_log = ft.Column([], spacing=3, scroll=ft.ScrollMode.AUTO, height=90)
+    suno_log = ft.Column([], spacing=3, scroll=ft.ScrollMode.AUTO, auto_scroll=True, height=90)
 
     def _copy_suno_log(e):
         lines = []
@@ -468,15 +470,38 @@ def main(page: ft.Page):
         suno_send_btn.disabled = count == 0
         page.update()
 
+    def _on_select_all(e):
+        checked = e.control.value
+        for i, cb in enumerate(_song_checkboxes):
+            cb.value = checked
+            _suno_checked[i] = checked
+        _update_send_btn()
+
     def _on_checkbox_change(idx: int, val: bool):
         _suno_checked[idx] = val
+        # Untick "Select All" if any individual is unchecked
+        if not val and _select_all_cb.value:
+            _select_all_cb.value = False
+        # Auto-tick "Select All" if all are now checked
+        elif val and all(_suno_checked.get(i, False) for i in range(len(_song_checkboxes))):
+            _select_all_cb.value = True
         _update_send_btn()
+
+    _select_all_cb = ft.Checkbox(
+        label="Select All",
+        label_style=ft.TextStyle(size=12, color=DIM),
+        value=False,
+        active_color="#7B68EE",
+        on_change=_on_select_all,
+    )
 
     def _reload_song_list():
         nonlocal _folder_songs
         folder = config.get("output_folder", "")
         _folder_songs = []
         _suno_checked.clear()
+        _song_checkboxes.clear()
+        _select_all_cb.value = False
         if folder:
             for p in sorted(Path(folder).rglob("*.txt")):
                 song = _parse_song_file(p)
@@ -489,16 +514,26 @@ def main(page: ft.Page):
                 ft.Text("No .txt songs found in output folder.", size=12, color=DIM)
             )
         else:
+            suno_song_list.controls.append(_select_all_cb)
             for i, song in enumerate(_folder_songs):
                 _suno_checked[i] = False
                 idx = i
+                cb = ft.Checkbox(
+                    value=False,
+                    active_color="#7B68EE",
+                    on_change=lambda e, i=idx: _on_checkbox_change(i, e.control.value),
+                )
+                _song_checkboxes.append(cb)
+                def _delete_folder_song(e, file_path=song["_file"]):
+                    try:
+                        Path(file_path).unlink()
+                    except Exception:
+                        pass
+                    _reload_song_list()
+
                 row = ft.Row(
                     [
-                        ft.Checkbox(
-                            value=False,
-                            active_color="#7B68EE",
-                            on_change=lambda e, i=idx: _on_checkbox_change(i, e.control.value),
-                        ),
+                        cb,
                         ft.Column(
                             [
                                 ft.Text(song["title"], size=13, color=TEXT,
@@ -507,6 +542,13 @@ def main(page: ft.Page):
                                         size=11, color=DIM),
                             ],
                             spacing=1, expand=True,
+                        ),
+                        ft.IconButton(
+                            ft.Icons.DELETE_OUTLINE,
+                            icon_color="#FF6B6B",
+                            icon_size=16,
+                            tooltip="Delete song file",
+                            on_click=_delete_folder_song,
                         ),
                     ],
                     spacing=8,
@@ -530,6 +572,59 @@ def main(page: ft.Page):
         else:
             suno_section.visible = False
         page.update()
+
+    def do_delete_song(index: int):
+        nonlocal generated_songs, _selected_song_idx
+        if index >= len(generated_songs):
+            return
+
+        # Delete the saved file and remove from saved list
+        saved = preview_col.data or []
+        if index < len(saved):
+            try:
+                if saved[index].exists():
+                    saved[index].unlink()
+                    log_gen(f"Deleted: {saved[index].name}", DIM)
+            except Exception:
+                pass
+            saved.pop(index)
+            preview_col.data = saved
+
+        # Remove from generated_songs list
+        generated_songs.pop(index)
+
+        # If no songs left, hide everything
+        if not generated_songs:
+            pills_row.controls = []
+            pills_row.visible = False
+            pills_container.visible = False
+            preview_col.controls = []
+            preview_col.visible = False
+            open_folder_btn.visible = False
+            reset_btn.visible = False
+            progress_text.value = "All songs deleted"
+            _refresh_suno_section()
+            page.update()
+            return
+
+        # Rebuild pills
+        def truncate_title(title: str, max_len: int = 25) -> str:
+            return title if len(title) <= max_len else title[:max_len-1] + "…"
+
+        new_idx = min(index, len(generated_songs) - 1)
+        pills_row.controls = [
+            ft.ElevatedButton(
+                truncate_title(song["title"]),
+                bgcolor=ACCENT if i == new_idx else SURFACE2,
+                color=TEXT,
+                tooltip=song["title"],
+                on_click=lambda e, idx=i: show_song(idx),
+            )
+            for i, song in enumerate(generated_songs)
+        ]
+        progress_text.value = f"{len(generated_songs)} song{'s' if len(generated_songs) > 1 else ''} remaining"
+        show_song(new_idx)
+        _refresh_suno_section()
 
     def show_song(index: int):
         nonlocal _selected_song_idx
@@ -563,8 +658,21 @@ def main(page: ft.Page):
                                     ],
                                     spacing=2, expand=True,
                                 ),
-                                ft.Text(f"✓  {saved_name}", size=11, color=SUCCESS)
-                                if saved_name else ft.Container(),
+                                ft.Row(
+                                    [
+                                        ft.Text(f"✓  {saved_name}", size=11, color=SUCCESS)
+                                        if saved_name else ft.Container(),
+                                        ft.IconButton(
+                                            ft.Icons.DELETE_OUTLINE,
+                                            icon_color="#FF6B6B",
+                                            icon_size=18,
+                                            tooltip="Delete this song",
+                                            on_click=lambda e, idx=index: do_delete_song(idx),
+                                        ),
+                                    ],
+                                    spacing=4,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
                             ],
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
@@ -802,7 +910,7 @@ def main(page: ft.Page):
 
                     paths = client.wait_and_download(
                         clips,
-                        output_dir=config.get("output_folder", ""),
+                        output_dir=config.get("song_output_folder", ""),
                         song_title=song["title"],
                         on_status=on_poll,
                     )
@@ -958,16 +1066,16 @@ def main(page: ft.Page):
             options=[ft.dropdown.Option(m) for m in model_names],
             value=default_model_name, width=280, text_size=14,
         )
-        s_genre = ft.Dropdown(
+        s_genre = ft.TextField(
             label="Default Genre",
             label_style=ft.TextStyle(color=DIM, size=12),
             border_color=BORDER, focused_border_color=ACCENT,
             bgcolor=SURFACE2, color=TEXT, border_radius=10,
-            options=[ft.dropdown.Option(g) for g in GENRES],
             value=config.get("default_genre", "Pop"), width=280, text_size=14,
+            content_padding=ft.padding.symmetric(horizontal=16, vertical=14),
         )
         s_output = ft.TextField(
-            label="Output Folder",
+            label="Lyrics Folder",
             label_style=ft.TextStyle(color=DIM, size=12),
             border_color=BORDER, focused_border_color=ACCENT,
             bgcolor=SURFACE2, color=TEXT, border_radius=10,
@@ -975,13 +1083,24 @@ def main(page: ft.Page):
             expand=True, text_size=13,
             content_padding=ft.padding.symmetric(horizontal=16, vertical=14),
         )
-
-        folder_picker = ft.FilePicker(
-            on_result=lambda e: (
-                setattr(s_output, "value", e.path or s_output.value),
-                page.update(),
-            )
+        s_song_output = ft.TextField(
+            label="Songs Folder (mp3)",
+            label_style=ft.TextStyle(color=DIM, size=12),
+            border_color=BORDER, focused_border_color=ACCENT,
+            bgcolor=SURFACE2, color=TEXT, border_radius=10,
+            value=config.get("song_output_folder", ""),
+            expand=True, text_size=13,
+            content_padding=ft.padding.symmetric(horizontal=16, vertical=14),
         )
+
+        _active_folder_target = {"ref": s_output}
+
+        def _on_folder_picked(e):
+            if e.path:
+                _active_folder_target["ref"].value = e.path
+                page.update()
+
+        folder_picker = ft.FilePicker(on_result=_on_folder_picked)
         page.overlay.append(folder_picker)
         page.update()
 
@@ -1011,7 +1130,7 @@ def main(page: ft.Page):
             style=ft.ButtonStyle(color="#FF6B6B"),
             visible=bool(config.get("suno_cookie")),
         )
-        s_suno_log = ft.Column([], spacing=3, scroll=ft.ScrollMode.AUTO, height=80)
+        s_suno_log = ft.Column([], spacing=3, scroll=ft.ScrollMode.AUTO, auto_scroll=True, height=80)
 
         def _copy_s_suno_log(e):
             lines = []
@@ -1108,17 +1227,23 @@ def main(page: ft.Page):
 
         # ── Save handler ───────────────────────────────────────────────────────
         def on_save(e):
-            config["model"]         = MODELS[s_model.value]
-            config["default_genre"] = s_genre.value
-            config["output_folder"] = s_output.value
+            config["model"]              = MODELS[s_model.value]
+            config["default_genre"]      = s_genre.value
+            config["output_folder"]      = s_output.value
+            config["song_output_folder"] = s_song_output.value
             save_config(config)
             model_dd.value  = s_model.value
             genre_dd.value  = s_genre.value
             page.overlay.remove(folder_picker)
             show_main_view()
 
-        def on_pick(e):
-            folder_picker.get_directory_path(dialog_title="Choose output folder")
+        def on_pick_lyrics(e):
+            _active_folder_target["ref"] = s_output
+            folder_picker.get_directory_path(dialog_title="Choose lyrics folder")
+
+        def on_pick_songs(e):
+            _active_folder_target["ref"] = s_song_output
+            folder_picker.get_directory_path(dialog_title="Choose songs folder")
 
         return ft.Column(
             [
@@ -1160,8 +1285,21 @@ def main(page: ft.Page):
                                                 ft.IconButton(
                                                     ft.Icons.FOLDER_OPEN,
                                                     icon_color=ACCENT,
-                                                    tooltip="Choose folder",
-                                                    on_click=on_pick,
+                                                    tooltip="Choose lyrics folder",
+                                                    on_click=on_pick_lyrics,
+                                                ),
+                                            ],
+                                            spacing=8,
+                                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                        ),
+                                        ft.Row(
+                                            [
+                                                s_song_output,
+                                                ft.IconButton(
+                                                    ft.Icons.FOLDER_OPEN,
+                                                    icon_color=ACCENT,
+                                                    tooltip="Choose songs folder",
+                                                    on_click=on_pick_songs,
                                                 ),
                                             ],
                                             spacing=8,
