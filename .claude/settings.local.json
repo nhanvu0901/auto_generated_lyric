@@ -91,7 +91,9 @@
       "WebFetch(domain:hookgenius.app)",
       "WebFetch(domain:soundcharts.com)",
       "WebFetch(domain:howtopromptsuno.com)",
-      "WebFetch(domain:www.songaifarm.com)"
+      "WebFetch(domain:www.songaifarm.com)",
+      "Bash(.venv/bin/python -c \"import py_compile; py_compile.compile\\(''main.py'', doraise=True\\); py_compile.compile\\(''core/engine.py'', doraise=True\\); print\\(''OK''\\)\")",
+      "Bash(bash deploy/build_mac.sh)"
     ]
   }
 }

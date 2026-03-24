@@ -354,7 +354,7 @@ def parse_songs(raw_text: str, genre: str, theme: str) -> list[dict]:
 
 def parse_single_song(raw_text: str, genre: str, theme: str) -> dict | None:
     """Parse a single song without delimiters."""
-    if "[Verse 1]" in raw_text or "[Verse]" in raw_text:
+    if re.search(r"\[(Verse|Chorus|Hook)", raw_text):
         return _parse_block(raw_text, genre, theme)
     return None
 
@@ -375,7 +375,7 @@ def _parse_block(block: str, genre: str, theme: str) -> dict | None:
 
     # Extract lyrics (everything before the footer)
     footer_start = re.search(
-        r"^(Title|BPM|Central Metaphor)\s*:", block, re.MULTILINE | re.IGNORECASE
+        r"^(Title|BPM|Central Metaphor|Key Emotion Arc)\s*:", block, re.MULTILINE | re.IGNORECASE
     )
     lyrics_text = block[: footer_start.start()].strip() if footer_start else block.strip()
 
