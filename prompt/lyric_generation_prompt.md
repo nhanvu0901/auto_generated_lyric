@@ -24,6 +24,11 @@ Don't write the theme literally. Find ONE central image or metaphor that carries
   • It must come from an UNEXPECTED domain — use the metaphor roulette below to force freshness
   • It must EVOLVE — appearing differently as the narrator's understanding shifts across the song
 
+  METAPHOR DISCIPLINE — the most common AI failure is mixed metaphors. Once you choose a domain, STAY IN IT:
+  • If the relationship is a truck → the commitment is the gas tank, the arguments are potholes, the breakup is the engine dying. Every image maps to the same world.
+  • If grief is a house → the rooms are memories, the dust is time passing, the locked door is denial. Don't suddenly introduce ocean imagery.
+  • Test: could you DRAW a single scene that contains all your metaphors? If they exist in the same physical space, you're consistent. If they require different locations, you've mixed frames.
+
   METAPHOR ROULETTE — Pick the source domain by this rule:
   Take the FIRST LETTER of {THEME}. Match it to a domain:
     A=astronomy, B=biology, C=carpentry, D=diving/ocean depth, E=electricity,
@@ -85,13 +90,30 @@ STEP E — CHOOSE YOUR RHYME APPROACH (forced variety):
 
 These rules separate real songs from AI-generated filler. Internalize them — don't just follow them.
 
-RULE 1 — THE CAMERA TEST:
-  For every verse line, ask: "Could a camera film this?"
-  • YES (keep it): "I still set the table for two" — you can see the plates, the empty chair
-  • YES (keep it): "Your jacket's still hanging by the door" — visible, specific
+RULE 1 — OBJECT-AS-EMOTION (the master technique):
+  Never name the feeling. Place a physical object or action in the scene and let the listener supply the emotion.
+  
+  THE CAMERA TEST — for every verse line, ask: "Could a camera film this?"
+  • YES (keep it): "Coffee's gone cold on the counter, your lipstick stain on my cup" — heartbreak shown through two objects
+  • YES (keep it): "Two plates at his table at night" — love arriving, shown through a place setting
   • NO (rewrite): "My heart aches with longing" — a camera can't film longing
   • NO (rewrite): "The memories haunt me" — a camera can't film haunting
-  Transform every NO into a YES by finding the physical action, object, or gesture that SHOWS the emotion.
+  Transform every NO into a YES by finding the physical object that CARRIES the emotion.
+
+  THE SIDEWAYS DETAIL — the most powerful lyric technique:
+  Find one small, involuntary physical behavior that reveals a large truth about the character.
+  • "He still sleeps a little sideways, like a man who never rests" — one observation = entire biography of loneliness
+  • "You laugh about nothing in particular, and that's all I need to know" — one habit = contentment
+  • "She kept holding my hand, said 'You don't have to be smooth, just be my kind of man'" — one overheard line = their whole relationship
+  The smaller the detail, the larger the truth it reveals. This is what separates good from great.
+
+  DOMESTIC SPECIFICITY — small beats grand:
+  • "We built crib rails from leftover fence boards" beats "we started a family"
+  • "You hang sheets on the backyard line, wind turns them into sails" beats "our life was an adventure"
+  • "Rust red truck in the gravel drive, paint's gone but the motor's strong" beats "our love endured"
+  The most domestic, mundane detail — when chosen precisely — becomes the most universal image.
+  Paradox: the more specific to one person's life, the more every listener recognizes themselves.
+
   Exception: Chorus lines can be more abstract/emotional since they carry the thesis.
 
 RULE 2 — WRITE CONVERSATIONALLY:
@@ -101,6 +123,15 @@ RULE 2 — WRITE CONVERSATIONALLY:
   • Use the vocabulary of real speech: "yeah", "God", "damn", "still", "just", "so", "but", "anyway", "kinda", "y'know"
   • A 5th-grade reading level often produces the clearest, most powerful singing
   • Nashville test: "Would you say it that way?" If the answer is no, rephrase it in natural word order
+
+  THE OVERHEARD DIALOGUE TECHNIQUE:
+  Include at least ONE line of actual spoken dialogue in the song — something a character says in quotes or as direct speech.
+  This breaks the lyrical tone just enough to feel real. Examples:
+  • "Boy, you're late again"
+  • "Baby, it's straight enough for me"
+  • "Catch me, darling, and I'll stay for life"
+  • "Girl, I already are"
+  The line should sound like you caught someone mid-conversation. It should be slightly imperfect, slightly funny, or slightly devastating. Never polished. Never poetic. Just human.
 
 RULE 3 — VARY YOUR LINE LENGTHS (this is the #1 AI tell):
   • NEVER make every line the same length. This is what makes AI lyrics sound robotic
@@ -130,7 +161,26 @@ RULE 5 — EMOTIONAL ARC THAT PROGRESSES:
     Examples: denial → realization → acceptance / confidence → doubt → defiance / tenderness → anger → surrender / numbness → grief → gratitude
   • Verse 1 opens a scene. Verse 2 must reveal something NEW — a time jump, a consequence, a shift in understanding. NEVER restate Verse 1 in different words
   • The bridge (if used) must be the moment the narrator says the thing they've been avoiding. The hardest truth. The confession. The reversal. NOT a softer version of the chorus
-  • The final chorus should hit DIFFERENTLY than the first — even if the words are mostly the same, the accumulated context should make the listener hear it with new meaning
+
+  THE CHORUS DEEPENING PRINCIPLE:
+  The final chorus must hit DIFFERENTLY than the first — even if the words are identical.
+  How this works: the verses and bridge accumulate context that RECOLORS the chorus.
+  • In "Green Green Grass of Home," the identical chorus shifts from nostalgia to a funeral scene — the words don't change, the listener does
+  • In "Ghost of You," "photographs and empty frames" starts as description, becomes obsession, becomes acceptance
+  • In "Back Porch Promise," "stone by stone, season by season, they built a life" starts as aspiration and ends as eulogy
+  Technique: Imagine the chorus as a photograph. Each verse is a different frame placed around it — same photo, completely different meaning.
+
+  TIME AS STRUCTURE — use time jumps to create emotional gravity:
+  The most powerful songs compress TIME between verses:
+  • V1 = this moment / V2 = years later / Bridge = looking back from the end
+  • V1 = the meeting / V2 = the middle / Bridge = after it ended
+  • V1 = young / V2 = old / Bridge = what they'd tell their younger self
+  When a song spans years or decades, the chorus gains weight with each repetition because the listener feels time passing. This works in EVERY genre:
+  • Pop: V1 = the breakup text / V2 = running into them months later
+  • Hip-hop: V1 = the struggle / V2 = the success / Bridge = what was lost along the way
+  • R&B: V1 = first night together / V2 = the morning everything changed
+  • Rock: V1 = the fight / V2 = the silence after
+  • Indie: V1 = the memory / V2 = visiting the same place now
 
 RULE 6 — THE "ONLY THIS SONG" TEST:
   After drafting, check every line against this question: "Could this line appear in a different song about a different topic?"
